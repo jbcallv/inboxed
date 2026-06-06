@@ -24,7 +24,7 @@ def find_email(first: str, last: str, domain: str) -> str | None:
         timeout=15,
     )
 
-    if response.status_code == 404:
+    if response.status_code in (404, 429):
         return None
 
     response.raise_for_status()

@@ -23,6 +23,13 @@ class CampaignCreate(BaseModel):
     name: str
 
 
+@router.get("")
+def list_campaigns(user: dict = Depends(get_current_user)):
+    db = get_db()
+    result = db.table("campaigns").select("*").eq("user_id", user["sub"]).order("created_at", desc=True).execute()
+    return result.data
+
+
 @router.post("")
 def create_campaign(body: CampaignCreate, user: dict = Depends(get_current_user)):
     db = get_db()
@@ -117,37 +124,57 @@ def _prep_stream(campaign_id: str):
         .execute()
     )
     total = len(contacts_result.data)
+    kept = 0
+    dropped = 0
     yield _sse({"event": "start", "total": total})
 
     for i, row in enumerate(contacts_result.data):
         contact = Contact(**row)
-        contact = _process_contact(contact, db)
-        yield _sse({"event": "progress", "done": i + 1, "total": total, "status": contact.status})
+        contact, warning = _process_contact(contact, db)
+        if contact.status in ("drafted", "queued", "verified", "enriched", "enriching", "generating"):
+            kept += 1
+        elif contact.status in ("rejected", "no_email"):
+            dropped += 1
+        payload = {"event": "progress", "done": i + 1, "total": total,
+                   "status": contact.status, "kept": kept, "dropped": dropped}
+        if warning:
+            payload["warning"] = warning
+        yield _sse(payload)
 
     db.table("campaigns").update({"status": "ready"}).eq("id", campaign_id).execute()
-    yield _sse({"event": "done"})
+    yield _sse({"event": "done", "kept": kept, "dropped": dropped})
 
 
-def _process_contact(contact: Contact, db) -> Contact:
+def _process_contact(contact: Contact, db) -> tuple[Contact, str]:
+    """Returns (updated_contact, warning_message). Warning is empty string if none."""
+    warning = ""
     try:
         if not contact.email:
             db.table("contacts").update({"status": "finding"}).eq("id", contact.id).execute()
             contact = contact.model_copy(update={"status": "finding"})
-            email = finder_module.find_email(
-                contact.first_name or "",
-                contact.last_name or "",
-                _domain_from_website(contact.company_website),
-            )
+            domain = _domain_from_website(contact.company_website)
+            if not domain:
+                db.table("contacts").update({"status": "no_email", "reject_reason": "no_domain"}).eq("id", contact.id).execute()
+                return contact.model_copy(update={"status": "no_email"}), warning
+            email = finder_module.find_email(contact.first_name or "", contact.last_name or "", domain)
             if not email:
                 db.table("contacts").update({"status": "no_email", "reject_reason": "not_found"}).eq("id", contact.id).execute()
-                return contact.model_copy(update={"status": "no_email"})
+                return contact.model_copy(update={"status": "no_email"}), warning
             db.table("contacts").update({"email": email}).eq("id", contact.id).execute()
             contact = contact.model_copy(update={"email": email})
 
         db.table("contacts").update({"status": "verifying"}).eq("id", contact.id).execute()
-        contact = verify_module.verify_contact(contact.model_copy(update={"status": "verifying"}))
+        try:
+            contact = verify_module.verify_contact(contact.model_copy(update={"status": "verifying"}))
+        except Exception as exc:
+            err = str(exc)
+            if "Insufficient credits" in err or "credits" in err.lower():
+                warning = "MillionVerifier has no credits — verification skipped. Add credits at app.millionverifier.com"
+                db.table("contacts").update({"status": "new"}).eq("id", contact.id).execute()
+                return contact.model_copy(update={"status": "new"}), warning
+            raise
         if contact.status != "verified":
-            return contact
+            return contact, warning
 
         db.table("contacts").update({"status": "enriching"}).eq("id", contact.id).execute()
         website_text = ""
@@ -166,12 +193,12 @@ def _process_contact(contact: Contact, db) -> Contact:
                 {"contact_id": contact.id, "subject": draft.subject, "body": draft.body, "status": "draft"}
             ).execute()
             db.table("contacts").update({"status": "drafted"}).eq("id", contact.id).execute()
-            return contact.model_copy(update={"status": "drafted"})
+            return contact.model_copy(update={"status": "drafted"}), warning
 
-        return contact.model_copy(update={"status": "generating"})
+        return contact.model_copy(update={"status": "generating"}), warning
     except Exception as exc:
         log.error("Prep error for contact %s: %s", contact.id, exc)
-        return contact
+        return contact, warning
 
 
 def _domain_from_website(website: str | None) -> str:

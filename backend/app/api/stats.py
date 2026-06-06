@@ -16,20 +16,20 @@ def campaign_stats(campaign_id: str, user: dict = Depends(get_current_user)):
         s = row["status"]
         status_counts[s] = status_counts.get(s, 0) + 1
 
-    responses = (
-        db.table("responses")
-        .select("sentiment,is_hot_lead,contact_id")
-        .execute()
-    )
-    # filter to contacts in this campaign
-    campaign_contact_ids = {r["id"] for r in db.table("contacts").select("id").eq("campaign_id", campaign_id).execute().data}
-    campaign_responses = [r for r in responses.data if r["contact_id"] in campaign_contact_ids]
+    contact_ids = [r["id"] for r in db.table("contacts").select("id").eq("campaign_id", campaign_id).execute().data]
+
+    replies = 0
+    hot_leads = 0
+    if contact_ids:
+        resp = db.table("responses").select("is_hot_lead").in_("contact_id", contact_ids).execute()
+        replies = len(resp.data)
+        hot_leads = sum(1 for r in resp.data if r["is_hot_lead"])
 
     return {
         "status_counts": status_counts,
         "total": len(contacts.data),
-        "replies": len(campaign_responses),
-        "hot_leads": sum(1 for r in campaign_responses if r["is_hot_lead"]),
+        "replies": replies,
+        "hot_leads": hot_leads,
     }
 
 
