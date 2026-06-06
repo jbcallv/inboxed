@@ -170,12 +170,9 @@ def _process_contact(contact: Contact, db, skip_verification: bool = False) -> t
             db.table("contacts").update({"status": "finding"}).eq("id", contact.id).execute()
             contact = contact.model_copy(update={"status": "finding"})
             domain = _domain_from_website(contact.company_website)
-            if not domain:
-                db.table("contacts").update({"status": "no_email", "reject_reason": "no_domain"}).eq("id", contact.id).execute()
-                return contact.model_copy(update={"status": "no_email"}), warning
-            email = finder_module.find_email(contact.first_name or "", contact.last_name or "", domain)
+            email, reason = finder_module.find_email(contact.first_name or "", contact.last_name or "", domain)
             if not email:
-                db.table("contacts").update({"status": "no_email", "reject_reason": "not_found"}).eq("id", contact.id).execute()
+                db.table("contacts").update({"status": "no_email", "reject_reason": reason or "not_found"}).eq("id", contact.id).execute()
                 return contact.model_copy(update={"status": "no_email"}), warning
             db.table("contacts").update({"email": email}).eq("id", contact.id).execute()
             contact = contact.model_copy(update={"email": email})
