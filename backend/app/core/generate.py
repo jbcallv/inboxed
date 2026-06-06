@@ -55,7 +55,7 @@ def _build_user_message(contact: Contact, website_text: str) -> str:
 
 def _parse_draft(raw: str) -> Draft | None:
     try:
-        data = json.loads(raw)
+        data = json.loads(_strip_code_fence(raw))
         subject = data.get("subject", "").strip()
         body = data.get("body", "").strip() + UNSUBSCRIBE_FOOTER
         if subject and body:
@@ -63,3 +63,12 @@ def _parse_draft(raw: str) -> Draft | None:
     except (json.JSONDecodeError, AttributeError):
         pass
     return None
+
+
+def _strip_code_fence(text: str) -> str:
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1]
+    if text.endswith("```"):
+        text = text.rsplit("```", 1)[0]
+    return text.strip()
