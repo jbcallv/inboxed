@@ -1,10 +1,12 @@
 import json
 import logging
+import concurrent.futures
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from ..db import get_db
+from ..config import settings
 from ..core.ingest import parse_upload
 from ..core.models import Contact
 from ..core import (
@@ -132,38 +134,63 @@ def pause_campaign(campaign_id: str, user: dict = Depends(get_current_user)):
 
 
 def _prep_stream(campaign_id: str, skip_verification: bool = False):
-    db = get_db()
-    contacts_result = (
-        db.table("contacts")
+    rows = (
+        get_db()
+        .table("contacts")
         .select("*")
         .eq("campaign_id", campaign_id)
         .eq("status", "new")
         .execute()
+        .data
     )
-    total = len(contacts_result.data)
+    total = len(rows)
     kept = 0
     dropped = 0
+    done = 0
+    last_warning = ""
+
     yield _sse({"event": "start", "total": total})
 
-    for i, row in enumerate(contacts_result.data):
-        contact = Contact(**row)
-        contact, warning = _process_contact(contact, db, skip_verification)
-        if contact.status in ("drafted", "queued", "verified", "enriched", "enriching", "generating"):
-            kept += 1
-        elif contact.status in ("rejected", "no_email"):
-            dropped += 1
-        payload = {"event": "progress", "done": i + 1, "total": total,
-                   "status": contact.status, "kept": kept, "dropped": dropped}
-        if warning:
-            payload["warning"] = warning
-        yield _sse(payload)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=settings.prep_workers) as pool:
+        futures = {
+            pool.submit(_process_contact, Contact(**row), skip_verification): row
+            for row in rows
+        }
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                contact, warning = future.result()
+            except Exception as exc:
+                log.error("Unhandled prep worker error: %s", exc)
+                done += 1
+                dropped += 1
+                yield _sse({"event": "progress", "done": done, "total": total,
+                            "kept": kept, "dropped": dropped, "status": "error"})
+                continue
 
-    db.table("campaigns").update({"status": "ready"}).eq("id", campaign_id).execute()
+            done += 1
+            if warning:
+                last_warning = warning
+            if contact.status in ("drafted", "queued", "verified", "enriched", "enriching", "generating"):
+                kept += 1
+            elif contact.status in ("rejected", "no_email"):
+                dropped += 1
+
+            payload = {"event": "progress", "done": done, "total": total,
+                       "status": contact.status, "kept": kept, "dropped": dropped}
+            if last_warning:
+                payload["warning"] = last_warning
+            yield _sse(payload)
+
+    get_db().table("campaigns").update({"status": "ready"}).eq("id", campaign_id).execute()
     yield _sse({"event": "done", "kept": kept, "dropped": dropped})
 
 
-def _process_contact(contact: Contact, db, skip_verification: bool = False) -> tuple[Contact, str]:
-    """Returns (updated_contact, warning_message). Warning is empty string if none."""
+def _process_contact(contact: Contact, skip_verification: bool = False) -> tuple[Contact, str]:
+    """
+    Runs in a worker thread — calls get_db() to get this thread's own client.
+    Returns (updated_contact, warning_message).
+    """
+    db = get_db()
     warning = ""
     try:
         if not contact.email:
@@ -187,7 +214,7 @@ def _process_contact(contact: Contact, db, skip_verification: bool = False) -> t
             except Exception as exc:
                 err = str(exc)
                 if "Insufficient credits" in err or "credits" in err.lower():
-                    warning = "MillionVerifier has no credits — verification skipped. Add credits at app.millionverifier.com"
+                    warning = "MillionVerifier has no credits — add credits at app.millionverifier.com"
                     db.table("contacts").update({"status": "new"}).eq("id", contact.id).execute()
                     return contact.model_copy(update={"status": "new"}), warning
                 raise

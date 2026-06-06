@@ -1,0 +1,11 @@
+first_name,last_name,email,company_name,company_website,position,bio
+Sarah,Chen,sarah.chen@linear.app,Linear,https://linear.app,Head of Product,"Leads product strategy at Linear, the project management tool for software teams."
+Tom,Preston-Werner,tom@github.com,GitHub,https://github.com,Co-founder,"Co-founded GitHub and grew it to the world's largest code hosting platform before acquisition by Microsoft."
+Leah,Culver,leah@dropbox.com,Dropbox,https://www.dropbox.com,Engineering Manager,"Engineering manager at Dropbox focused on developer platform and API integrations."
+David,Hahn,david@notion.so,Notion,https://www.notion.so,VP of Engineering,"Oversees engineering at Notion, the all-in-one workspace used by millions of teams worldwide."
+Maya,Goldberg,maya@loom.com,Loom,https://www.loom.com,Director of Growth,"Drives growth and expansion at Loom, the async video messaging platform now part of Atlassian."
+James,Hawkins,james@posthog.com,PostHog,https://posthog.com,CEO,"Co-founded PostHog, the open-source product analytics platform. Previously worked at Y Combinator."
+Erin,Mikail,erin@retool.com,Retool,https://retool.com,Head of Sales,"Leads enterprise sales at Retool, the platform for building internal tools used by 100k+ companies."
+Carlos,Fenollosa,carlos@pika.art,Pika,https://pika.art,CTO,"Co-founded Pika, the AI video generation startup that raised $55M Series A."
+Nina,Walsh,nina@attio.com,Attio,https://attio.com,Head of Marketing,"Heads marketing at Attio, the next-generation CRM built for modern data-driven sales teams."
+Wei,Zhang,wei@descript.com,Descript,https://www.descript.com,Product Lead,"Product lead at Descript, the AI-powered audio and video editing platform backed by Andreessen Horowitz."
