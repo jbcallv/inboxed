@@ -17,15 +17,17 @@
 	let finished = $state(false);
 	let warning = $state('');
 	let error = $state('');
+	let skipVerification = $state(false);
 
 	async function startPrep() {
 		running = true;
 		error = '';
 		warning = '';
 		const token = await getToken();
+		const url = `${BASE}/api/campaigns/${id}/prep?skip_verification=${skipVerification}`;
 		let res: Response;
 		try {
-			res = await fetch(`${BASE}/api/campaigns/${id}/prep`, {
+			res = await fetch(url, {
 				method: 'POST',
 				headers: token ? { Authorization: `Bearer ${token}` } : {}
 			});
@@ -66,14 +68,28 @@
 
 <div class="max-w-2xl mx-auto py-16 px-4">
 	<Card>
-		<StepHeader step={2} title="Verify &amp; generate" description="Local prefilter → MillionVerifier gate (ok only) → enrich → Claude draft. Only verified contacts cost credits." />
+		<StepHeader
+			step={2}
+			title="Verify and generate"
+			description="Local prefilter then MillionVerifier (ok only) then enrich then Claude draft. Only verified contacts spend credits."
+		/>
 
 		{#if !running && !finished}
+			<div class="mb-5 border border-neutral-100 rounded-lg p-4 space-y-3">
+				<label class="flex items-start gap-3 cursor-pointer">
+					<input type="checkbox" bind:checked={skipVerification} class="mt-0.5" />
+					<div>
+						<p class="text-sm text-neutral-700 font-medium">Skip MillionVerifier (find emails only)</p>
+						<p class="text-xs text-neutral-400 mt-0.5">Hunter will still run for contacts missing an email. Verification gate is bypassed — use only if MV is unavailable or for testing.</p>
+					</div>
+				</label>
+			</div>
+
 			<button
 				onclick={startPrep}
 				class="w-full py-3 bg-neutral-900 text-white rounded-lg text-sm font-medium"
 			>
-				Start verification + generation
+				{skipVerification ? 'Find emails and generate (no verification)' : 'Start verification and generation'}
 			</button>
 		{:else}
 			<div class="space-y-4">
@@ -87,22 +103,23 @@
 			</div>
 
 			{#if warning}
-				<div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
-					⚠️ {warning}
+				<div class="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+					{warning}
 				</div>
 			{/if}
 
 			{#if finished}
 				<div class="mt-6 pt-6 border-t border-neutral-100">
 					<p class="text-sm text-neutral-500 mb-4">
-						Done — <strong>{kept}</strong> emails drafted, <strong>{dropped}</strong> contacts dropped.
+						Done — <span class="font-medium text-neutral-900">{kept}</span> emails drafted,
+						<span class="font-medium">{dropped}</span> contacts dropped.
 					</p>
 					<div class="flex justify-end">
 						<button
 							onclick={() => goto(`/campaigns/${id}/sample`)}
 							class="px-5 py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium"
 						>
-							Review sample →
+							Review sample
 						</button>
 					</div>
 				</div>

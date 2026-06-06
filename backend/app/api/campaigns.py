@@ -30,6 +30,19 @@ def list_campaigns(user: dict = Depends(get_current_user)):
     return result.data
 
 
+@router.get("/{campaign_id}")
+def get_campaign(campaign_id: str, user: dict = Depends(get_current_user)):
+    db = get_db()
+    _assert_owns(campaign_id, user)
+    campaign = db.table("campaigns").select("*").eq("id", campaign_id).single().execute()
+    contacts = db.table("contacts").select("status").eq("campaign_id", campaign_id).execute()
+    status_counts: dict[str, int] = {}
+    for row in contacts.data:
+        s = row["status"]
+        status_counts[s] = status_counts.get(s, 0) + 1
+    return {**campaign.data, "status_counts": status_counts, "total": len(contacts.data)}
+
+
 @router.post("")
 def create_campaign(body: CampaignCreate, user: dict = Depends(get_current_user)):
     db = get_db()
@@ -59,12 +72,16 @@ def upload_contacts(
 
 
 @router.post("/{campaign_id}/prep")
-def prep_campaign(campaign_id: str, user: dict = Depends(get_current_user)):
+def prep_campaign(
+    campaign_id: str,
+    skip_verification: bool = False,
+    user: dict = Depends(get_current_user),
+):
     _assert_owns(campaign_id, user)
     db = get_db()
     db.table("campaigns").update({"status": "prepping"}).eq("id", campaign_id).execute()
     return StreamingResponse(
-        _prep_stream(campaign_id), media_type="text/event-stream"
+        _prep_stream(campaign_id, skip_verification), media_type="text/event-stream"
     )
 
 
@@ -114,7 +131,7 @@ def pause_campaign(campaign_id: str, user: dict = Depends(get_current_user)):
     return {"status": "paused"}
 
 
-def _prep_stream(campaign_id: str):
+def _prep_stream(campaign_id: str, skip_verification: bool = False):
     db = get_db()
     contacts_result = (
         db.table("contacts")
@@ -130,7 +147,7 @@ def _prep_stream(campaign_id: str):
 
     for i, row in enumerate(contacts_result.data):
         contact = Contact(**row)
-        contact, warning = _process_contact(contact, db)
+        contact, warning = _process_contact(contact, db, skip_verification)
         if contact.status in ("drafted", "queued", "verified", "enriched", "enriching", "generating"):
             kept += 1
         elif contact.status in ("rejected", "no_email"):
@@ -145,7 +162,7 @@ def _prep_stream(campaign_id: str):
     yield _sse({"event": "done", "kept": kept, "dropped": dropped})
 
 
-def _process_contact(contact: Contact, db) -> tuple[Contact, str]:
+def _process_contact(contact: Contact, db, skip_verification: bool = False) -> tuple[Contact, str]:
     """Returns (updated_contact, warning_message). Warning is empty string if none."""
     warning = ""
     try:
@@ -163,18 +180,22 @@ def _process_contact(contact: Contact, db) -> tuple[Contact, str]:
             db.table("contacts").update({"email": email}).eq("id", contact.id).execute()
             contact = contact.model_copy(update={"email": email})
 
-        db.table("contacts").update({"status": "verifying"}).eq("id", contact.id).execute()
-        try:
-            contact = verify_module.verify_contact(contact.model_copy(update={"status": "verifying"}))
-        except Exception as exc:
-            err = str(exc)
-            if "Insufficient credits" in err or "credits" in err.lower():
-                warning = "MillionVerifier has no credits — verification skipped. Add credits at app.millionverifier.com"
-                db.table("contacts").update({"status": "new"}).eq("id", contact.id).execute()
-                return contact.model_copy(update={"status": "new"}), warning
-            raise
-        if contact.status != "verified":
-            return contact, warning
+        if skip_verification:
+            db.table("contacts").update({"status": "verified", "mv_result": "skipped"}).eq("id", contact.id).execute()
+            contact = contact.model_copy(update={"status": "verified", "mv_result": "skipped"})
+        else:
+            db.table("contacts").update({"status": "verifying"}).eq("id", contact.id).execute()
+            try:
+                contact = verify_module.verify_contact(contact.model_copy(update={"status": "verifying"}))
+            except Exception as exc:
+                err = str(exc)
+                if "Insufficient credits" in err or "credits" in err.lower():
+                    warning = "MillionVerifier has no credits — verification skipped. Add credits at app.millionverifier.com"
+                    db.table("contacts").update({"status": "new"}).eq("id", contact.id).execute()
+                    return contact.model_copy(update={"status": "new"}), warning
+                raise
+            if contact.status != "verified":
+                return contact, warning
 
         db.table("contacts").update({"status": "enriching"}).eq("id", contact.id).execute()
         website_text = ""

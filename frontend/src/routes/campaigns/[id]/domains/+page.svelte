@@ -54,8 +54,8 @@
 		/>
 
 		{#if !hasDomains}
-			<div class="p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 mb-6">
-				⚠️ No sending domains configured. You cannot launch until at least one domain is added and verified in Resend.
+			<div class="p-4 bg-neutral-50 border border-neutral-200 rounded-lg text-sm text-neutral-600 mb-6">
+				No sending domains configured. Add at least one domain that is verified in Resend before launching.
 			</div>
 		{/if}
 
@@ -72,7 +72,7 @@
 				onclick={() => { suggestOpen = !suggestOpen; }}
 				class="w-full text-left px-4 py-3 text-sm font-medium text-neutral-700 flex justify-between items-center"
 			>
-				<span>🔍 Find available domains</span>
+				<span>Find available domains</span>
 				<span class="text-neutral-400 text-xs">{suggestOpen ? '▲' : '▼'}</span>
 			</button>
 			{#if suggestOpen}
