@@ -14,6 +14,10 @@
 	let newDomain = $state({ domain: '', from_name: '', from_locals: '' });
 	let searching = $state(false);
 	let adding = $state(false);
+	let addOpen = $state(false);
+	let suggestOpen = $state(false);
+
+	const hasDomains = $derived(domains.length > 0);
 
 	onMount(async () => {
 		domains = await get('/api/domains').catch(() => []);
@@ -27,6 +31,7 @@
 	}
 
 	async function addDomain() {
+		if (!newDomain.domain || !newDomain.from_name) return;
 		adding = true;
 		await post('/api/domains', {
 			domain: newDomain.domain,
@@ -36,65 +41,110 @@
 		domains = await get('/api/domains').catch(() => []);
 		newDomain = { domain: '', from_name: '', from_locals: '' };
 		adding = false;
+		addOpen = false;
 	}
 </script>
 
 <div class="max-w-2xl mx-auto py-16 px-4">
 	<Card class="mb-6">
-		<StepHeader step={4} title="Sending domains" description="15–20 warmed domains gives you ~4 500 sends/day at steady state. Speed = domain count." />
+		<StepHeader
+			step={4}
+			title="Sending domains"
+			description="Each domain sends up to 250/day at steady state. 15–20 domains = ~4,500/day. Speed scales with domain count only."
+		/>
 
+		{#if !hasDomains}
+			<div class="p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 mb-6">
+				⚠️ No sending domains configured. You cannot launch until at least one domain is added and verified in Resend.
+			</div>
+		{/if}
+
+		<!-- Existing domains -->
 		<div class="space-y-3 mb-6">
 			{#each domains as domain}
 				<DomainCard {domain} />
 			{/each}
-			{#if domains.length === 0}
-				<p class="text-sm text-neutral-400">No domains yet. Add one below.</p>
+		</div>
+
+		<!-- Find available domains -->
+		<div class="border border-neutral-100 rounded-lg mb-3">
+			<button
+				onclick={() => { suggestOpen = !suggestOpen; }}
+				class="w-full text-left px-4 py-3 text-sm font-medium text-neutral-700 flex justify-between items-center"
+			>
+				<span>🔍 Find available domains</span>
+				<span class="text-neutral-400 text-xs">{suggestOpen ? '▲' : '▼'}</span>
+			</button>
+			{#if suggestOpen}
+				<div class="px-4 pb-4 border-t border-neutral-100">
+					<p class="text-xs text-neutral-400 mt-3 mb-2">Enter a base name (e.g. your brand) — we'll generate variants and check availability via Domainr.</p>
+					<div class="flex gap-2">
+						<input bind:value={baseName} placeholder="e.g. eximo, inboxed, getreach"
+							class="flex-1 border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-neutral-400" />
+						<button onclick={suggest} disabled={searching || !baseName.trim()}
+							class="px-4 py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+							{searching ? 'Searching…' : 'Search'}
+						</button>
+					</div>
+					{#if suggestions.length > 0}
+						<p class="text-xs text-neutral-400 mt-3 mb-2">Click a domain to pre-fill the form below:</p>
+						<div class="flex flex-wrap gap-2">
+							{#each suggestions as s}
+								<button
+									onclick={() => { newDomain.domain = s.domain; addOpen = true; suggestOpen = false; }}
+									class="text-xs px-3 py-1.5 border border-green-200 bg-green-50 text-green-800 rounded-full hover:bg-green-100 transition-colors">
+									{s.domain}
+								</button>
+							{/each}
+						</div>
+					{:else if !searching && baseName}
+						<p class="text-xs text-neutral-400 mt-3">No available domains found. Try a different name.</p>
+					{/if}
+				</div>
 			{/if}
 		</div>
 
-		<details class="mb-4">
-			<summary class="text-xs text-neutral-500 cursor-pointer">Suggest available domains</summary>
-			<div class="mt-3 flex gap-2">
-				<input bind:value={baseName} placeholder="base name, e.g. inboxed"
-					class="flex-1 border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none" />
-				<button onclick={suggest} disabled={searching}
-					class="px-3 py-2 border border-neutral-200 rounded-lg text-sm disabled:opacity-50">
-					{searching ? '…' : 'Search'}
-				</button>
-			</div>
-			{#if suggestions.length > 0}
-				<div class="mt-3 flex flex-wrap gap-2">
-					{#each suggestions.filter(s => s.available) as s}
-						<button onclick={() => { newDomain.domain = s.domain; }}
-							class="text-xs px-2 py-1 border border-neutral-200 rounded hover:bg-neutral-50">
-							{s.domain}
-						</button>
-					{/each}
+		<!-- Add domain form -->
+		<div class="border border-neutral-100 rounded-lg">
+			<button
+				onclick={() => { addOpen = !addOpen; }}
+				class="w-full text-left px-4 py-3 text-sm font-medium text-neutral-700 flex justify-between items-center"
+			>
+				<span>+ Add domain to pool</span>
+				<span class="text-neutral-400 text-xs">{addOpen ? '▲' : '▼'}</span>
+			</button>
+			{#if addOpen}
+				<div class="px-4 pb-4 border-t border-neutral-100 space-y-2 mt-3">
+					<p class="text-xs text-neutral-400 mb-1">Domain must already be verified in Resend with SPF/DKIM/DMARC set.</p>
+					<input bind:value={newDomain.domain} placeholder="Domain (e.g. geteximo.com)"
+						class="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none" />
+					<input bind:value={newDomain.from_name} placeholder="From name (e.g. Joseph at Eximo)"
+						class="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none" />
+					<input bind:value={newDomain.from_locals} placeholder="Local parts, comma-separated (e.g. joseph, hello, team)"
+						class="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none" />
+					<button onclick={addDomain} disabled={adding || !newDomain.domain || !newDomain.from_name}
+						class="w-full py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium disabled:opacity-50 mt-1">
+						{adding ? 'Adding…' : 'Add to pool'}
+					</button>
 				</div>
 			{/if}
-		</details>
-
-		<details>
-			<summary class="text-xs text-neutral-500 cursor-pointer">Add domain manually</summary>
-			<div class="mt-3 space-y-2">
-				<input bind:value={newDomain.domain} placeholder="getinboxed.com"
-					class="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none" />
-				<input bind:value={newDomain.from_name} placeholder="From name (e.g. Joseph)"
-					class="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none" />
-				<input bind:value={newDomain.from_locals} placeholder="Local parts, comma-separated: joseph, hello, team"
-					class="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none" />
-				<button onclick={addDomain} disabled={adding || !newDomain.domain}
-					class="w-full py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium disabled:opacity-50">
-					{adding ? 'Adding…' : 'Add domain'}
-				</button>
-			</div>
-		</details>
+		</div>
 	</Card>
 
-	<div class="flex justify-end">
-		<button onclick={() => goto(`/campaigns/${id}/monitor`)}
-			class="px-5 py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium">
-			Continue →
+	<div class="flex justify-between items-center">
+		<p class="text-xs text-neutral-400">
+			{#if hasDomains}
+				{domains.length} domain{domains.length > 1 ? 's' : ''} in pool — warmup starts today.
+			{:else}
+				Add at least one domain before launching.
+			{/if}
+		</p>
+		<button
+			onclick={() => goto(`/campaigns/${id}/monitor`)}
+			disabled={!hasDomains}
+			class="px-5 py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+		>
+			{hasDomains ? 'Continue →' : 'Add a domain first'}
 		</button>
 	</div>
 </div>
