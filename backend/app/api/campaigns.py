@@ -1,6 +1,6 @@
+import asyncio
 import json
 import logging
-import concurrent.futures
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
@@ -74,14 +74,13 @@ def upload_contacts(
 
 
 @router.post("/{campaign_id}/prep")
-def prep_campaign(
+async def prep_campaign(
     campaign_id: str,
     skip_verification: bool = False,
     user: dict = Depends(get_current_user),
 ):
     _assert_owns(campaign_id, user)
-    db = get_db()
-    db.table("campaigns").update({"status": "prepping"}).eq("id", campaign_id).execute()
+    get_db().table("campaigns").update({"status": "prepping"}).eq("id", campaign_id).execute()
     return StreamingResponse(
         _prep_stream(campaign_id, skip_verification), media_type="text/event-stream"
     )
@@ -91,26 +90,23 @@ def prep_campaign(
 def get_sample(campaign_id: str, n: int = 5, user: dict = Depends(get_current_user)):
     _assert_owns(campaign_id, user)
     db = get_db()
-    result = (
+    contacts = db.table("contacts").select("id,first_name,last_name,company_name,email").eq("campaign_id", campaign_id).execute().data
+    contact_ids = [c["id"] for c in contacts]
+    contacts_map = {c["id"]: c for c in contacts}
+
+    if not contact_ids:
+        return []
+
+    emails = (
         db.table("outreach_emails")
         .select("id,subject,body,contact_id")
         .eq("status", "draft")
+        .in_("contact_id", contact_ids)
         .limit(n)
         .execute()
+        .data
     )
-    contacts_result = (
-        db.table("contacts")
-        .select("id,first_name,last_name,company_name,email")
-        .eq("campaign_id", campaign_id)
-        .execute()
-    )
-    contacts_map = {c["id"]: c for c in contacts_result.data}
-
-    samples = []
-    for email_row in result.data:
-        contact = contacts_map.get(email_row["contact_id"], {})
-        samples.append({**email_row, "contact": contact})
-    return samples
+    return [{**e, "contact": contacts_map.get(e["contact_id"], {})} for e in emails]
 
 
 @router.post("/{campaign_id}/launch")
@@ -133,7 +129,7 @@ def pause_campaign(campaign_id: str, user: dict = Depends(get_current_user)):
     return {"status": "paused"}
 
 
-def _prep_stream(campaign_id: str, skip_verification: bool = False):
+async def _prep_stream(campaign_id: str, skip_verification: bool = False):
     rows = (
         get_db()
         .table("contacts")
@@ -151,36 +147,39 @@ def _prep_stream(campaign_id: str, skip_verification: bool = False):
 
     yield _sse({"event": "start", "total": total})
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=settings.prep_workers) as pool:
-        futures = {
-            pool.submit(_process_contact, Contact(**row), skip_verification): row
-            for row in rows
-        }
-        for future in concurrent.futures.as_completed(futures):
+    loop = asyncio.get_event_loop()
+    semaphore = asyncio.Semaphore(settings.prep_workers)
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def run_one(row: dict) -> None:
+        async with semaphore:
             try:
-                contact, warning = future.result()
+                result = await loop.run_in_executor(
+                    None, _process_contact, Contact(**row), skip_verification
+                )
             except Exception as exc:
                 log.error("Unhandled prep worker error: %s", exc)
-                done += 1
-                dropped += 1
-                yield _sse({"event": "progress", "done": done, "total": total,
-                            "kept": kept, "dropped": dropped, "status": "error"})
-                continue
+                result = (Contact(**row), "")
+            await queue.put(result)
 
-            done += 1
-            if warning:
-                last_warning = warning
-            if contact.status in ("drafted", "queued", "verified", "enriched", "enriching", "generating"):
-                kept += 1
-            elif contact.status in ("rejected", "no_email"):
-                dropped += 1
+    tasks = [asyncio.create_task(run_one(row)) for row in rows]
 
-            payload = {"event": "progress", "done": done, "total": total,
-                       "status": contact.status, "kept": kept, "dropped": dropped}
-            if last_warning:
-                payload["warning"] = last_warning
-            yield _sse(payload)
+    for _ in range(total):
+        contact, warning = await queue.get()
+        done += 1
+        if warning:
+            last_warning = warning
+        if contact.status in ("drafted", "queued", "verified", "enriched", "enriching", "generating"):
+            kept += 1
+        elif contact.status in ("rejected", "no_email"):
+            dropped += 1
+        payload = {"event": "progress", "done": done, "total": total,
+                   "status": contact.status, "kept": kept, "dropped": dropped}
+        if last_warning:
+            payload["warning"] = last_warning
+        yield _sse(payload)
 
+    await asyncio.gather(*tasks)
     get_db().table("campaigns").update({"status": "ready"}).eq("id", campaign_id).execute()
     yield _sse({"event": "done", "kept": kept, "dropped": dropped})
 
