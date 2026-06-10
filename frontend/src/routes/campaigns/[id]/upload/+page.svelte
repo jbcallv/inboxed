@@ -5,6 +5,7 @@
 	import Card from '$lib/components/Card.svelte';
 	import StepHeader from '$lib/components/StepHeader.svelte';
 	import DropZone from '$lib/components/DropZone.svelte';
+	import StepNav from '$lib/components/StepNav.svelte';
 
 	const id = $derived($page.params.id);
 	let file = $state<File | null>(null);
@@ -55,5 +56,6 @@
 				</button>
 			</div>
 		{/if}
+		<StepNav campaignId={id} next={{ href: `/campaigns/${id}/verify`, label: 'Verify + generate' }} />
 	</Card>
 </div>

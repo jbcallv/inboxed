@@ -1,20 +1,26 @@
+import time
 import httpx
 from ..config import settings
 from .models import DomainSuggestion
 
-_DOMAINR_URL = "https://domainr.p.rapidapi.com/v2/search"
+_DOMAINR_STATUS_URL = "https://domainr.p.rapidapi.com/v2/status"
 _PREFIXES = ["get", "try", "use", "go", "mail"]
 _SUFFIXES = ["-hq", "-app", "-team"]
 _TLDS = [".io", ".co", ".ai", ".com", ".net"]
 
 
 def suggest_sending_domains(base_name: str) -> list[DomainSuggestion]:
-    """Returns available domain suggestions for base_name. Empty if DOMAINR_API_KEY unset."""
     if not settings.domainr_api_key:
         return []
 
     candidates = _build_candidates(base_name)
-    return [s for s in [_check(d) for d in candidates] if s is not None and s.available]
+    results = []
+    for domain in candidates:
+        suggestion = _check(domain)
+        if suggestion and suggestion.available:
+            results.append(suggestion)
+        time.sleep(0.15)  # ~6 req/s — stays under RapidAPI free tier limits
+    return results
 
 
 def _build_candidates(base: str) -> list[str]:
@@ -34,20 +40,31 @@ def _build_candidates(base: str) -> list[str]:
 def _check(domain: str) -> DomainSuggestion | None:
     try:
         response = httpx.get(
-            _DOMAINR_URL,
-            params={"query": domain},
+            _DOMAINR_STATUS_URL,
+            params={"domain": domain},
             headers={
                 "X-RapidAPI-Key": settings.domainr_api_key,
                 "X-RapidAPI-Host": "domainr.p.rapidapi.com",
             },
             timeout=10,
         )
+        if response.status_code == 429:
+            time.sleep(1)
+            response = httpx.get(
+                _DOMAINR_STATUS_URL,
+                params={"domain": domain},
+                headers={
+                    "X-RapidAPI-Key": settings.domainr_api_key,
+                    "X-RapidAPI-Host": "domainr.p.rapidapi.com",
+                },
+                timeout=10,
+            )
         if response.status_code != 200:
             return None
-        results = response.json().get("results", [])
-        for r in results:
-            if r.get("domain") == domain:
-                available = "inactive" in r.get("summary", "").lower()
+        for entry in response.json().get("status", []):
+            if entry.get("domain") == domain:
+                summary = entry.get("summary", "").lower()
+                available = "inactive" in summary or "undelegated" in summary
                 return DomainSuggestion(domain=domain, available=available)
     except Exception:
         pass

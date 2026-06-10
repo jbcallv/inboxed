@@ -30,10 +30,17 @@
 		refresh();
 	}
 
+	async function resume() {
+		await post(`/api/campaigns/${id}/resume`);
+		refresh();
+	}
+
 	async function launch() {
 		await post(`/api/campaigns/${id}/launch`);
 		refresh();
 	}
+
+	const hasDomains = $derived(domains.length > 0);
 
 	const statusLabel: Record<string, string> = {
 		draft: 'Draft',
@@ -54,14 +61,22 @@
 			</div>
 			<div class="flex gap-2">
 				{#if campaign.status === 'ready'}
-					<button onclick={launch}
-						class="px-4 py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium">
+					{#if !hasDomains}
+						<span class="text-xs text-amber-600 self-center mr-1">Configure a domain first</span>
+					{/if}
+					<button onclick={launch} disabled={!hasDomains}
+						class="px-4 py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed">
 						Launch sending
 					</button>
 				{:else if campaign.status === 'sending'}
 					<button onclick={pause}
 						class="px-4 py-2 border border-neutral-200 text-neutral-600 rounded-lg text-sm">
 						Pause
+					</button>
+				{:else if campaign.status === 'paused'}
+					<button onclick={resume}
+						class="px-4 py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium">
+						Resume
 					</button>
 				{/if}
 			</div>
@@ -84,7 +99,11 @@
 		<Card class="mb-6">
 			<p class="text-xs font-medium text-neutral-400 uppercase tracking-widest mb-4">Domain pool</p>
 			{#if domains.length === 0}
-				<p class="text-sm text-neutral-400">No domains configured.</p>
+				<p class="text-sm text-neutral-400 mb-3">No domains configured.</p>
+				<a href="/campaigns/{id}/domains"
+					class="text-sm text-neutral-700 underline underline-offset-2">
+					Add a sending domain
+				</a>
 			{:else}
 				<div class="space-y-3">
 					{#each domains as domain}
@@ -100,19 +119,23 @@
 		<div class="grid grid-cols-2 gap-2">
 			<a href="/campaigns/{id}/upload"
 				class="block border border-neutral-200 rounded-lg px-4 py-3 text-sm text-neutral-700 hover:border-neutral-300 hover:bg-white transition-colors bg-neutral-50">
-				Upload contacts
+				1. Upload contacts
 			</a>
 			<a href="/campaigns/{id}/verify"
 				class="block border border-neutral-200 rounded-lg px-4 py-3 text-sm text-neutral-700 hover:border-neutral-300 hover:bg-white transition-colors bg-neutral-50">
-				Verify + generate
+				2. Verify + generate
 			</a>
 			<a href="/campaigns/{id}/sample"
 				class="block border border-neutral-200 rounded-lg px-4 py-3 text-sm text-neutral-700 hover:border-neutral-300 hover:bg-white transition-colors bg-neutral-50">
-				Review sample
+				3. Review sample
 			</a>
 			<a href="/campaigns/{id}/domains"
 				class="block border border-neutral-200 rounded-lg px-4 py-3 text-sm text-neutral-700 hover:border-neutral-300 hover:bg-white transition-colors bg-neutral-50">
-				Configure domains
+				4. Configure domains
+			</a>
+			<a href="/campaigns/{id}/monitor"
+				class="block border border-neutral-200 rounded-lg px-4 py-3 text-sm text-neutral-700 hover:border-neutral-300 hover:bg-white transition-colors bg-neutral-50 col-span-2">
+				5. Monitor
 			</a>
 		</div>
 	{:else}

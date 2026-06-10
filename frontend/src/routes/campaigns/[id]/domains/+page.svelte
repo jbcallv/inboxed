@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { get, post } from '$lib/api';
 	import Card from '$lib/components/Card.svelte';
 	import StepHeader from '$lib/components/StepHeader.svelte';
 	import DomainCard from '$lib/components/DomainCard.svelte';
+	import StepNav from '$lib/components/StepNav.svelte';
 
 	const id = $derived($page.params.id);
 	let domains = $state<any[]>([]);
@@ -131,20 +131,9 @@
 		</div>
 	</Card>
 
-	<div class="flex justify-between items-center">
-		<p class="text-xs text-neutral-400">
-			{#if hasDomains}
-				{domains.length} domain{domains.length > 1 ? 's' : ''} in pool — warmup starts today.
-			{:else}
-				Add at least one domain before launching.
-			{/if}
-		</p>
-		<button
-			onclick={() => goto(`/campaigns/${id}/monitor`)}
-			disabled={!hasDomains}
-			class="px-5 py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
-		>
-			{hasDomains ? 'Continue →' : 'Add a domain first'}
-		</button>
-	</div>
+	<StepNav
+		campaignId={id}
+		prev={{ href: `/campaigns/${id}/sample`, label: '← Review sample' }}
+		next={{ href: `/campaigns/${id}/monitor`, label: 'Monitor', disabled: !hasDomains }}
+	/>
 </div>

@@ -129,6 +129,14 @@ def pause_campaign(campaign_id: str, user: dict = Depends(get_current_user)):
     return {"status": "paused"}
 
 
+@router.post("/{campaign_id}/resume")
+def resume_campaign(campaign_id: str, user: dict = Depends(get_current_user)):
+    _assert_owns(campaign_id, user)
+    db = get_db()
+    db.table("campaigns").update({"status": "sending"}).eq("id", campaign_id).execute()
+    return {"status": "sending"}
+
+
 async def _prep_stream(campaign_id: str, skip_verification: bool = False):
     rows = (
         get_db()

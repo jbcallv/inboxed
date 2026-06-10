@@ -6,6 +6,7 @@
 	import StepHeader from '$lib/components/StepHeader.svelte';
 	import StatPill from '$lib/components/StatPill.svelte';
 	import DomainCard from '$lib/components/DomainCard.svelte';
+	import StepNav from '$lib/components/StepNav.svelte';
 
 	const id = $derived($page.params.id);
 	let stats = $state<any>(null);
@@ -30,6 +31,14 @@
 		await post(`/api/campaigns/${id}/pause`);
 		refresh();
 	}
+
+	async function resume() {
+		await post(`/api/campaigns/${id}/resume`);
+		refresh();
+	}
+
+	const isPaused = $derived(stats?.status === 'paused');
+	const isSending = $derived(stats?.status === 'sending');
 </script>
 
 <div class="max-w-2xl mx-auto py-16 px-4">
@@ -49,12 +58,20 @@
 			<p class="text-sm text-neutral-400 mb-6">Loading stats…</p>
 		{/if}
 
-		<div class="flex justify-end">
-			<button onclick={pause}
-				class="px-4 py-2 border border-neutral-200 text-neutral-600 rounded-lg text-sm hover:bg-neutral-50">
-				Pause campaign
-			</button>
+		<div class="flex justify-end gap-2">
+			{#if isPaused}
+				<button onclick={resume}
+					class="px-4 py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium">
+					Resume sending
+				</button>
+			{:else}
+				<button onclick={pause}
+					class="px-4 py-2 border border-neutral-200 text-neutral-600 rounded-lg text-sm hover:bg-neutral-50">
+					Pause campaign
+				</button>
+			{/if}
 		</div>
+		<StepNav campaignId={id} prev={{ href: `/campaigns/${id}/domains`, label: '← Domains' }} />
 	</Card>
 
 	<h3 class="text-xs font-medium text-neutral-400 uppercase tracking-widest mb-3">Domain pool</h3>

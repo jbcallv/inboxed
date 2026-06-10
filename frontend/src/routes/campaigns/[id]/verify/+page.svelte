@@ -5,6 +5,7 @@
 	import Card from '$lib/components/Card.svelte';
 	import StepHeader from '$lib/components/StepHeader.svelte';
 	import ProgressLine from '$lib/components/ProgressLine.svelte';
+	import StepNav from '$lib/components/StepNav.svelte';
 
 	const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 	const id = $derived($page.params.id);
@@ -129,5 +130,10 @@
 		{#if error}
 			<p class="text-xs text-red-500 mt-3">{error}</p>
 		{/if}
+		<StepNav
+			campaignId={id}
+			prev={{ href: `/campaigns/${id}/upload`, label: '← Upload' }}
+			next={{ href: `/campaigns/${id}/sample`, label: 'Review sample', disabled: !finished }}
+		/>
 	</Card>
 </div>

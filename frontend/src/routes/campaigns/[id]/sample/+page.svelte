@@ -6,6 +6,7 @@
 	import Card from '$lib/components/Card.svelte';
 	import StepHeader from '$lib/components/StepHeader.svelte';
 	import EmailPreviewCard from '$lib/components/EmailPreviewCard.svelte';
+	import StepNav from '$lib/components/StepNav.svelte';
 
 	const id = $derived($page.params.id);
 	let emails = $state<any[]>([]);
@@ -57,15 +58,12 @@
 			>
 				{canLaunch ? 'Approve and launch' : 'Cannot launch yet'}
 			</button>
-			<a href="/campaigns/{id}/domains"
-				class="px-4 py-2 border border-neutral-200 text-neutral-600 rounded-lg text-sm flex items-center">
-				Domains
-			</a>
-			<a href="/campaigns/{id}/verify"
-				class="px-4 py-2 border border-neutral-200 text-neutral-600 rounded-lg text-sm flex items-center">
-				Re-generate
-			</a>
 		</div>
+		<StepNav
+			campaignId={id}
+			prev={{ href: `/campaigns/${id}/verify`, label: '← Re-generate' }}
+			next={{ href: `/campaigns/${id}/domains`, label: 'Configure domains' }}
+		/>
 	</Card>
 
 	{#if loading}
