@@ -85,7 +85,7 @@
 		<!-- Stats -->
 		<Card class="mb-4">
 			<p class="text-xs font-medium text-neutral-400 uppercase tracking-widest mb-4">Contact pipeline</p>
-			<div class="flex flex-wrap gap-3">
+			<div class="flex flex-wrap gap-3 justify-center">
 				<StatPill label="sent" value={campaign.status_counts?.sent ?? 0} />
 				<StatPill label="queued" value={campaign.status_counts?.queued ?? 0} />
 				<StatPill label="drafted" value={campaign.status_counts?.drafted ?? 0} />

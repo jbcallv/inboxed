@@ -46,7 +46,7 @@
 		<StepHeader step={5} title="Launch & monitor" description="The worker runs autonomously. Updates every 30 seconds." />
 
 		{#if stats}
-			<div class="flex flex-wrap gap-3 mb-6">
+			<div class="flex flex-wrap gap-3 justify-center mb-6">
 				<StatPill label="sent" value={stats.status_counts?.sent ?? 0} />
 				<StatPill label="queued" value={stats.status_counts?.queued ?? 0} />
 				<StatPill label="replies" value={stats.replies ?? 0} />

@@ -3,23 +3,20 @@ import httpx
 from ..config import settings
 from .models import DomainSuggestion
 
-_DOMAINR_STATUS_URL = "https://domainr.p.rapidapi.com/v2/status"
+_RDAP_URL = "https://rdap.org/domain/{domain}"
 _PREFIXES = ["get", "try", "use", "go", "mail"]
 _SUFFIXES = ["-hq", "-app", "-team"]
 _TLDS = [".io", ".co", ".ai", ".com", ".net"]
 
 
 def suggest_sending_domains(base_name: str) -> list[DomainSuggestion]:
-    if not settings.domainr_api_key:
-        return []
-
     candidates = _build_candidates(base_name)
     results = []
     for domain in candidates:
-        suggestion = _check(domain)
+        suggestion = _check_rdap(domain)
         if suggestion and suggestion.available:
             results.append(suggestion)
-        time.sleep(0.15)  # ~6 req/s — stays under RapidAPI free tier limits
+        time.sleep(0.1)
     return results
 
 
@@ -37,35 +34,15 @@ def _build_candidates(base: str) -> list[str]:
     return list(dict.fromkeys(candidates))[:20]
 
 
-def _check(domain: str) -> DomainSuggestion | None:
+def _check_rdap(domain: str) -> DomainSuggestion | None:
     try:
         response = httpx.get(
-            _DOMAINR_STATUS_URL,
-            params={"domain": domain},
-            headers={
-                "X-RapidAPI-Key": settings.domainr_api_key,
-                "X-RapidAPI-Host": "domainr.p.rapidapi.com",
-            },
-            timeout=10,
+            _RDAP_URL.format(domain=domain),
+            timeout=8,
+            follow_redirects=True,
         )
-        if response.status_code == 429:
-            time.sleep(1)
-            response = httpx.get(
-                _DOMAINR_STATUS_URL,
-                params={"domain": domain},
-                headers={
-                    "X-RapidAPI-Key": settings.domainr_api_key,
-                    "X-RapidAPI-Host": "domainr.p.rapidapi.com",
-                },
-                timeout=10,
-            )
-        if response.status_code != 200:
-            return None
-        for entry in response.json().get("status", []):
-            if entry.get("domain") == domain:
-                summary = entry.get("summary", "").lower()
-                available = "inactive" in summary or "undelegated" in summary
-                return DomainSuggestion(domain=domain, available=available)
+        # 404 = not registered = available; 200 = taken
+        available = response.status_code == 404
+        return DomainSuggestion(domain=domain, available=available)
     except Exception:
-        pass
-    return None
+        return None
