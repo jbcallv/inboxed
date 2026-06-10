@@ -77,7 +77,8 @@ def _map_row(row: dict, mapping: dict[str, str]) -> dict[str, Any]:
 
 
 def _has_useful_data(row: dict, mapping: dict[str, str]) -> bool:
-    return any(
-        bool(row.get(h, "").strip())
-        for h in mapping.values()
-    )
+    first = row.get(mapping.get("first_name", ""), "").strip()
+    last = row.get(mapping.get("last_name", ""), "").strip()
+    if not first and not last:
+        return False
+    return any(bool(row.get(h, "").strip()) for h in mapping.values())
