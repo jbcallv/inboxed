@@ -6,8 +6,8 @@ import openpyxl
 _FIELD_ALIASES: dict[str, list[str]] = {
     "first_name":       ["first name", "firstname", "first", "given name", "given_name"],
     "last_name":        ["last name", "lastname", "last", "surname", "family name", "family_name"],
-    "company_name":     ["company", "company name", "organization", "organisation", "org"],
-    "company_website":  ["website", "company website", "domain", "url", "site"],
+    "company_name":     ["company", "company name", "organization", "organisation", "org", "name"],
+    "company_website":  ["website", "company website", "url", "site"],
     "position":         ["title", "job title", "jobtitle", "role", "position"],
     "bio":              ["bio", "about", "description", "summary"],
     "email":            ["email", "email address", "e-mail", "emailaddress"],
@@ -77,8 +77,6 @@ def _map_row(row: dict, mapping: dict[str, str]) -> dict[str, Any]:
 
 
 def _has_useful_data(row: dict, mapping: dict[str, str]) -> bool:
-    first = row.get(mapping.get("first_name", ""), "").strip()
-    last = row.get(mapping.get("last_name", ""), "").strip()
-    if not first and not last:
-        return False
-    return any(bool(row.get(h, "").strip()) for h in mapping.values())
+    # Must have an email — useless without one for cold outreach
+    email_col = mapping.get("email", "")
+    return bool(row.get(email_col, "").strip())

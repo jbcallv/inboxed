@@ -72,12 +72,11 @@ class TestParseUploadCSV:
         rows = parse_upload(content, "contacts.csv")
         assert rows[0]["email"] == "alice@acme.com"
 
-    def test_rejects_nameless_rows(self):
+    def test_rejects_rows_with_no_email(self):
         content = self._make_csv(
             [
                 {"first_name": "Alice", "last_name": "Smith", "email": "alice@acme.com"},
-                {"first_name": "",      "last_name": "",       "email": "info@acme.com"},
-                {"first_name": "",      "last_name": "",       "email": "certificates@corp.com"},
+                {"first_name": "Bob",   "last_name": "Jones", "email": ""},
             ],
             ["first_name", "last_name", "email"],
         )
@@ -85,10 +84,20 @@ class TestParseUploadCSV:
         assert len(rows) == 1
         assert rows[0]["first_name"] == "Alice"
 
-    def test_accepts_row_with_only_first_name(self):
+    def test_accepts_nameless_row_with_email(self):
+        # Company-only contacts (no personal name) are valid if they have an email
         content = self._make_csv(
-            [{"first_name": "Alice", "last_name": "", "email": "alice@acme.com"}],
-            ["first_name", "last_name", "email"],
+            [{"first_name": "", "last_name": "", "email": "info@acme.com", "company_name": "Acme Corp"}],
+            ["first_name", "last_name", "email", "company_name"],
         )
         rows = parse_upload(content, "contacts.csv")
         assert len(rows) == 1
+        assert rows[0]["email"] == "info@acme.com"
+
+    def test_name_column_maps_to_company_name(self):
+        content = self._make_csv(
+            [{"first_name": "Alice", "email": "alice@acme.com", "name": "Acme Corp"}],
+            ["first_name", "email", "name"],
+        )
+        rows = parse_upload(content, "contacts.csv")
+        assert rows[0]["company_name"] == "Acme Corp"
