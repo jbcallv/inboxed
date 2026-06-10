@@ -32,17 +32,30 @@ def list_campaigns(user: dict = Depends(get_current_user)):
     return result.data
 
 
+_ALL_STATUSES = ["new", "finding", "verifying", "enriching", "generating", "drafted", "queued", "sent", "rejected", "no_email"]
+
+
 @router.get("/{campaign_id}")
 def get_campaign(campaign_id: str, user: dict = Depends(get_current_user)):
     db = get_db()
     _assert_owns(campaign_id, user)
     campaign = db.table("campaigns").select("*").eq("id", campaign_id).single().execute()
-    contacts = db.table("contacts").select("status").eq("campaign_id", campaign_id).execute()
+    # Use exact count per status to avoid Supabase's 1,000-row default limit
     status_counts: dict[str, int] = {}
-    for row in contacts.data:
-        s = row["status"]
-        status_counts[s] = status_counts.get(s, 0) + 1
-    return {**campaign.data, "status_counts": status_counts, "total": len(contacts.data)}
+    total = 0
+    for s in _ALL_STATUSES:
+        result = (
+            db.table("contacts")
+            .select("id", count="exact")
+            .eq("campaign_id", campaign_id)
+            .eq("status", s)
+            .execute()
+        )
+        n = result.count or 0
+        if n:
+            status_counts[s] = n
+            total += n
+    return {**campaign.data, "status_counts": status_counts, "total": total}
 
 
 @router.post("")
