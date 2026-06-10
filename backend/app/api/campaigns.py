@@ -86,6 +86,23 @@ async def prep_campaign(
     )
 
 
+@router.get("/{campaign_id}/contacts")
+def list_contacts(
+    campaign_id: str,
+    status: str | None = None,
+    page: int = 1,
+    limit: int = 50,
+    user: dict = Depends(get_current_user),
+):
+    _assert_owns(campaign_id, user)
+    db = get_db()
+    q = db.table("contacts").select("*").eq("campaign_id", campaign_id)
+    if status:
+        q = q.eq("status", status)
+    result = q.order("id").range((page - 1) * limit, page * limit - 1).execute()
+    return result.data
+
+
 @router.get("/{campaign_id}/sample")
 def get_sample(campaign_id: str, n: int = 5, user: dict = Depends(get_current_user)):
     _assert_owns(campaign_id, user)

@@ -134,8 +134,12 @@
 				4. Configure domains
 			</a>
 			<a href="/campaigns/{id}/monitor"
-				class="block border border-neutral-200 rounded-lg px-4 py-3 text-sm text-neutral-700 hover:border-neutral-300 hover:bg-white transition-colors bg-neutral-50 col-span-2">
+				class="block border border-neutral-200 rounded-lg px-4 py-3 text-sm text-neutral-700 hover:border-neutral-300 hover:bg-white transition-colors bg-neutral-50">
 				5. Monitor
+			</a>
+			<a href="/campaigns/{id}/contacts"
+				class="block border border-neutral-200 rounded-lg px-4 py-3 text-sm text-neutral-700 hover:border-neutral-300 hover:bg-white transition-colors bg-neutral-50">
+				View contacts
 			</a>
 		</div>
 	{:else}
