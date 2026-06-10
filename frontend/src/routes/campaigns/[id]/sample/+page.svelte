@@ -7,35 +7,39 @@
 	import StepHeader from '$lib/components/StepHeader.svelte';
 	import EmailPreviewCard from '$lib/components/EmailPreviewCard.svelte';
 	import StepNav from '$lib/components/StepNav.svelte';
-	import LimitInput from '$lib/components/LimitInput.svelte';
 
 	const id = $derived($page.params.id);
 	let emails = $state<any[]>([]);
 	let domains = $state<any[]>([]);
 	let loading = $state(true);
-	let limit = $state<number | null>(null);
+	let sampleSize = $state(5);
 
 	const hasDomains = $derived(domains.length > 0);
 	const hasEmails = $derived(emails.length > 0);
 	const canLaunch = $derived(hasDomains && hasEmails);
 
+	async function loadSample() {
+		loading = true;
+		emails = await get(`/api/campaigns/${id}/sample?n=${sampleSize}`).catch(() => []);
+		loading = false;
+	}
+
 	onMount(async () => {
-		[emails, domains] = await Promise.all([
-			get(`/api/campaigns/${id}/sample?n=5`).catch(() => []),
+		[, domains] = await Promise.all([
+			loadSample(),
 			get('/api/domains').catch(() => [])
 		]);
-		loading = false;
 	});
 
 	async function launch() {
-		await post(`/api/campaigns/${id}/launch`, limit ? { limit } : undefined);
+		await post(`/api/campaigns/${id}/launch`);
 		goto(`/campaigns/${id}`);
 	}
 </script>
 
 <div class="max-w-2xl mx-auto py-16 px-4">
 	<Card class="mb-6">
-		<StepHeader step={3} title="Review sample" description="A sample of generated emails. Approve to queue them for sending." />
+		<StepHeader step={3} title="Review sample" description="A random sample of generated emails. Approve to queue all drafted contacts for sending." />
 
 		{#if !loading}
 			{#if !hasEmails}
@@ -52,14 +56,30 @@
 			{/if}
 		{/if}
 
-		<div class="flex items-center gap-3">
-			<LimitInput bind:value={limit} placeholder="All drafted" />
+		<div class="flex items-center justify-between gap-3">
+			<div class="flex items-center gap-2">
+				<span class="text-xs text-neutral-400">Show</span>
+				{#each [3, 5, 10, 20] as n}
+					<button
+						onclick={() => { sampleSize = n; loadSample(); }}
+						class="px-2.5 py-1 rounded text-xs font-medium border transition-colors
+							{sampleSize === n
+								? 'bg-neutral-900 text-white border-neutral-900'
+								: 'bg-white text-neutral-500 border-neutral-200 hover:border-neutral-400'}"
+					>{n}</button>
+				{/each}
+				<button
+					onclick={loadSample}
+					class="px-2.5 py-1 rounded text-xs border border-neutral-200 text-neutral-500 hover:border-neutral-400 transition-colors">
+					Reshuffle
+				</button>
+			</div>
 			<button
 				onclick={launch}
 				disabled={!canLaunch}
-				class="flex-1 py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+				class="px-5 py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
 			>
-				{canLaunch ? 'Approve and launch' : 'Cannot launch yet'}
+				{canLaunch ? 'Approve and launch all' : 'Cannot launch yet'}
 			</button>
 		</div>
 		<StepNav

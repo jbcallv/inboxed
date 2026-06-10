@@ -109,6 +109,7 @@ def list_contacts(
 
 @router.get("/{campaign_id}/sample")
 def get_sample(campaign_id: str, n: int = 5, user: dict = Depends(get_current_user)):
+    import random
     _assert_owns(campaign_id, user)
     db = get_db()
     contacts = db.table("contacts").select("id,first_name,last_name,company_name,email").eq("campaign_id", campaign_id).execute().data
@@ -118,40 +119,28 @@ def get_sample(campaign_id: str, n: int = 5, user: dict = Depends(get_current_us
     if not contact_ids:
         return []
 
-    emails = (
+    # Fetch a larger pool then randomly pick n to avoid always showing the first rows
+    pool_size = max(n * 5, 50)
+    pool = (
         db.table("outreach_emails")
         .select("id,subject,body,contact_id")
         .eq("status", "draft")
         .in_("contact_id", contact_ids)
-        .limit(n)
+        .limit(pool_size)
         .execute()
         .data
     )
+    emails = random.sample(pool, min(n, len(pool)))
     return [{**e, "contact": contacts_map.get(e["contact_id"], {})} for e in emails]
 
 
-class LaunchBody(BaseModel):
-    limit: int | None = None
-
-
 @router.post("/{campaign_id}/launch")
-def launch_campaign(campaign_id: str, body: LaunchBody = LaunchBody(), user: dict = Depends(get_current_user)):
+def launch_campaign(campaign_id: str, user: dict = Depends(get_current_user)):
     _assert_owns(campaign_id, user)
     db = get_db()
-    if body.limit:
-        ids = (
-            db.table("contacts").select("id")
-            .eq("campaign_id", campaign_id).eq("status", "drafted")
-            .limit(body.limit).execute().data
-        )
-        if ids:
-            db.table("contacts").update({"status": "queued"}).in_(
-                "id", [r["id"] for r in ids]
-            ).execute()
-    else:
-        db.table("contacts").update({"status": "queued"}).eq(
-            "campaign_id", campaign_id
-        ).eq("status", "drafted").execute()
+    db.table("contacts").update({"status": "queued"}).eq(
+        "campaign_id", campaign_id
+    ).eq("status", "drafted").execute()
     db.table("campaigns").update({"status": "sending"}).eq("id", campaign_id).execute()
     return {"status": "sending"}
 
