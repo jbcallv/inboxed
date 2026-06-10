@@ -1,71 +1,80 @@
 # Inboxed
 
-Verified, personalized cold email — sent autonomously across a warmed domain pool.
+Autonomous cold email — verified, personalized, and sent across a warmed domain pool.
 
-## Quickstart
+## Setup
 
-### 1. Clone and configure
+### 1. Environment
 
 ```sh
 cp .env.example backend/.env
-# fill in all secrets (see SETUP.md)
+# fill in keys: SUPABASE_URL, SUPABASE_SERVICE_KEY, ANTHROPIC_API_KEY,
+#               HUNTER_API_KEY, RESEND_API_KEY, ZOHO_IMAP_USER, ZOHO_IMAP_PASSWORD
 ```
 
 ### 2. Database
 
-Run the three migrations in `migrations/` against your Supabase project in order:
-- `001_schema.sql` — tables
-- `002_rls.sql` — row-level security policies
-- `003_functions.sql` — `claim_queued_contacts` and `increment_domain_stat`
+Run migrations against your Supabase project in order:
 
-### 3. Backend (API + worker)
+```
+migrations/001_schema.sql
+migrations/002_rls.sql
+migrations/003_functions.sql
+```
+
+Paste each file into the Supabase SQL editor and run.
+
+### 3. Frontend env
+
+```sh
+cp frontend/.env.example frontend/.env
+# fill in VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_API_URL=http://localhost:8000
+```
+
+## Running locally
+
+```sh
+# backend
+cd backend && uv sync
+uv run fastapi dev app/main.py        # API on :8000
+
+# worker (separate terminal)
+uv run python -m app.worker.runner    # ticks every 15 min
+
+# frontend (separate terminal)
+cd frontend && npm install && npm run dev   # UI on :5173
+```
+
+## Campaign flow
+
+1. Create a campaign at `/campaigns`
+2. Upload a CSV of contacts (needs `first_name`, `last_name`, `company_website` at minimum)
+3. Run **Verify + generate** — Hunter finds missing emails, Claude drafts each one
+4. Review the sample to confirm email quality
+5. Add a sending domain (must be verified in Resend with SPF/DKIM/DMARC)
+6. Launch — the worker picks up queued contacts and sends automatically
+
+## Testing the send pipeline locally
+
+Pause the Railway worker first (so it doesn't race your local process), then:
 
 ```sh
 cd backend
-uv sync
-uv run uvicorn app.main:app --reload      # API on :8000
-uv run python -m app.worker.runner        # autonomous worker
+uv run python -m app.worker.run_tick_once   # fires one tick immediately, no window check
 ```
 
-### 4. Frontend
+## Tests
 
 ```sh
-cd frontend
-cp .env.example .env
-# fill in VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_API_URL
-npm install
-npm run dev                               # dev server on :5173
+cd backend && uv run pytest -v
+cd frontend && npm test
 ```
 
-### 5. Tests
+## Deployment
 
-```sh
-cd backend
-uv run pytest -v
+Deployed on Railway. `main` branch auto-deploys via `Procfile`:
+
 ```
-
-## Architecture
-
-Two processes, one Postgres database (Supabase):
-
-- **API** (`uvicorn app.main:app`) — thin FastAPI routers, delegate to `core/`
-- **Worker** (`python -m app.worker.runner`) — send tick (15 min), reply poller (10 min), daily warmup reset (midnight)
-
-The send tick uses `SELECT … FOR UPDATE SKIP LOCKED` (via Postgres function `claim_queued_contacts`) so multiple workers can run safely.
-
-## Key constraints (from SPEC)
-
-- Verification is a hard gate — only `MillionVerifier ok` passes. No pattern-guessing.
-- No credit (Hunter/Claude/Resend) is spent before verification.
-- Throughput scales with domain count, not with config. 18 domains → ~4 500/day at steady state.
-- Replies tracked via Zoho IMAP (not Resend inbound — MX conflict).
-
-## Credential verification needed (requires live keys)
-
-- MillionVerifier accuracy spike — run ~200 known-bounced addresses, confirm gate holds
-- Hunter email finder — verify domain/name lookup returns results
-- Resend webhook signature — test with a real bounce event
-- Zoho IMAP — test unseen fetch and Seen flag marking
-- Supabase JWT validation — test with a real auth session token
-
-See `SETUP.md` for the full setup checklist.
+web:    uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT
+worker: uv run python -m app.worker.runner
+```
