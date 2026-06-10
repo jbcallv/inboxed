@@ -6,6 +6,7 @@
 	import StepHeader from '$lib/components/StepHeader.svelte';
 	import ProgressLine from '$lib/components/ProgressLine.svelte';
 	import StepNav from '$lib/components/StepNav.svelte';
+	import LimitInput from '$lib/components/LimitInput.svelte';
 
 	const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 	const id = $derived($page.params.id);
@@ -19,13 +20,16 @@
 	let warning = $state('');
 	let error = $state('');
 	let skipVerification = $state(false);
+	let limit = $state<number | null>(null);
 
 	async function startPrep() {
 		running = true;
 		error = '';
 		warning = '';
 		const token = await getToken();
-		const url = `${BASE}/api/campaigns/${id}/prep?skip_verification=${skipVerification}`;
+		const params = new URLSearchParams({ skip_verification: String(skipVerification) });
+		if (limit) params.set('limit', String(limit));
+		const url = `${BASE}/api/campaigns/${id}/prep?${params}`;
 		let res: Response;
 		try {
 			res = await fetch(url, {
@@ -76,22 +80,26 @@
 		/>
 
 		{#if !running && !finished}
-			<div class="mb-5 border border-neutral-100 rounded-lg p-4 space-y-3">
-				<label class="flex items-start gap-3 cursor-pointer">
-					<input type="checkbox" bind:checked={skipVerification} class="mt-0.5" />
-					<div>
-						<p class="text-sm text-neutral-700 font-medium">Skip MillionVerifier (find emails only)</p>
-						<p class="text-xs text-neutral-400 mt-0.5">Hunter will still run for contacts missing an email. Verification gate is bypassed — use only if MV is unavailable or for testing.</p>
-					</div>
-				</label>
+			<div class="mb-5 space-y-3">
+				<div class="border border-neutral-100 rounded-lg p-4 space-y-3">
+					<label class="flex items-start gap-3 cursor-pointer">
+						<input type="checkbox" bind:checked={skipVerification} class="mt-0.5" />
+						<div>
+							<p class="text-sm text-neutral-700 font-medium">Skip MillionVerifier (find emails only)</p>
+							<p class="text-xs text-neutral-400 mt-0.5">Hunter will still run for contacts missing an email. Verification gate is bypassed — use only if MV is unavailable or for testing.</p>
+						</div>
+					</label>
+				</div>
+				<div class="flex items-center justify-between">
+					<LimitInput bind:value={limit} placeholder="All new" />
+					<button
+						onclick={startPrep}
+						class="px-5 py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium"
+					>
+						{skipVerification ? 'Find emails and generate' : 'Start verification and generation'}
+					</button>
+				</div>
 			</div>
-
-			<button
-				onclick={startPrep}
-				class="w-full py-3 bg-neutral-900 text-white rounded-lg text-sm font-medium"
-			>
-				{skipVerification ? 'Find emails and generate (no verification)' : 'Start verification and generation'}
-			</button>
 		{:else}
 			<div class="space-y-4">
 				<ProgressLine value={done} max={total || 1} label="contacts processed" />

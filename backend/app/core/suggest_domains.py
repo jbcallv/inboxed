@@ -42,6 +42,7 @@ def _check_rdap(domain: str) -> DomainSuggestion | None:
             follow_redirects=True,
         )
         # 404 = not registered = available; 200 = taken
+        print(response)
         available = response.status_code == 404
         return DomainSuggestion(domain=domain, available=available)
     except Exception:

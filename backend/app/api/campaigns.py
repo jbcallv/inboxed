@@ -59,11 +59,14 @@ def upload_contacts(
     campaign_id: str,
     file: UploadFile = File(...),
     column_map: str | None = Form(None),
+    limit: int | None = Form(None),
     user: dict = Depends(get_current_user),
 ):
     _assert_owns(campaign_id, user)
     col_map = json.loads(column_map) if column_map else None
     rows = parse_upload(file.file.read(), file.filename or "upload.csv", col_map)
+    if limit:
+        rows = rows[:limit]
 
     db = get_db()
     to_insert = [{**row, "campaign_id": campaign_id, "status": "new"} for row in rows]
@@ -77,12 +80,13 @@ def upload_contacts(
 async def prep_campaign(
     campaign_id: str,
     skip_verification: bool = False,
+    limit: int | None = None,
     user: dict = Depends(get_current_user),
 ):
     _assert_owns(campaign_id, user)
     get_db().table("campaigns").update({"status": "prepping"}).eq("id", campaign_id).execute()
     return StreamingResponse(
-        _prep_stream(campaign_id, skip_verification), media_type="text/event-stream"
+        _prep_stream(campaign_id, skip_verification, limit), media_type="text/event-stream"
     )
 
 
@@ -126,14 +130,28 @@ def get_sample(campaign_id: str, n: int = 5, user: dict = Depends(get_current_us
     return [{**e, "contact": contacts_map.get(e["contact_id"], {})} for e in emails]
 
 
+class LaunchBody(BaseModel):
+    limit: int | None = None
+
+
 @router.post("/{campaign_id}/launch")
-def launch_campaign(campaign_id: str, user: dict = Depends(get_current_user)):
+def launch_campaign(campaign_id: str, body: LaunchBody = LaunchBody(), user: dict = Depends(get_current_user)):
     _assert_owns(campaign_id, user)
     db = get_db()
-    # Move all drafted contacts to queued
-    db.table("contacts").update({"status": "queued"}).eq(
-        "campaign_id", campaign_id
-    ).eq("status", "drafted").execute()
+    if body.limit:
+        ids = (
+            db.table("contacts").select("id")
+            .eq("campaign_id", campaign_id).eq("status", "drafted")
+            .limit(body.limit).execute().data
+        )
+        if ids:
+            db.table("contacts").update({"status": "queued"}).in_(
+                "id", [r["id"] for r in ids]
+            ).execute()
+    else:
+        db.table("contacts").update({"status": "queued"}).eq(
+            "campaign_id", campaign_id
+        ).eq("status", "drafted").execute()
     db.table("campaigns").update({"status": "sending"}).eq("id", campaign_id).execute()
     return {"status": "sending"}
 
@@ -154,16 +172,11 @@ def resume_campaign(campaign_id: str, user: dict = Depends(get_current_user)):
     return {"status": "sending"}
 
 
-async def _prep_stream(campaign_id: str, skip_verification: bool = False):
-    rows = (
-        get_db()
-        .table("contacts")
-        .select("*")
-        .eq("campaign_id", campaign_id)
-        .eq("status", "new")
-        .execute()
-        .data
-    )
+async def _prep_stream(campaign_id: str, skip_verification: bool = False, limit: int | None = None):
+    q = get_db().table("contacts").select("*").eq("campaign_id", campaign_id).eq("status", "new")
+    if limit:
+        q = q.limit(limit)
+    rows = q.execute().data
     total = len(rows)
     kept = 0
     dropped = 0

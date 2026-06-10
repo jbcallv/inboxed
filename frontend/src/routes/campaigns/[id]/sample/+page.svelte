@@ -7,11 +7,13 @@
 	import StepHeader from '$lib/components/StepHeader.svelte';
 	import EmailPreviewCard from '$lib/components/EmailPreviewCard.svelte';
 	import StepNav from '$lib/components/StepNav.svelte';
+	import LimitInput from '$lib/components/LimitInput.svelte';
 
 	const id = $derived($page.params.id);
 	let emails = $state<any[]>([]);
 	let domains = $state<any[]>([]);
 	let loading = $state(true);
+	let limit = $state<number | null>(null);
 
 	const hasDomains = $derived(domains.length > 0);
 	const hasEmails = $derived(emails.length > 0);
@@ -26,7 +28,7 @@
 	});
 
 	async function launch() {
-		await post(`/api/campaigns/${id}/launch`);
+		await post(`/api/campaigns/${id}/launch`, limit ? { limit } : undefined);
 		goto(`/campaigns/${id}`);
 	}
 </script>
@@ -50,7 +52,8 @@
 			{/if}
 		{/if}
 
-		<div class="flex gap-3">
+		<div class="flex items-center gap-3">
+			<LimitInput bind:value={limit} placeholder="All drafted" />
 			<button
 				onclick={launch}
 				disabled={!canLaunch}

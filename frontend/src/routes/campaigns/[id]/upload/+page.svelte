@@ -6,12 +6,14 @@
 	import StepHeader from '$lib/components/StepHeader.svelte';
 	import DropZone from '$lib/components/DropZone.svelte';
 	import StepNav from '$lib/components/StepNav.svelte';
+	import LimitInput from '$lib/components/LimitInput.svelte';
 
 	const id = $derived($page.params.id);
 	let file = $state<File | null>(null);
 	let count = $state<number | null>(null);
 	let uploading = $state(false);
 	let error = $state('');
+	let limit = $state<number | null>(null);
 
 	async function upload() {
 		if (!file) return;
@@ -20,6 +22,7 @@
 		try {
 			const form = new FormData();
 			form.append('file', file);
+			if (limit) form.append('limit', String(limit));
 			const result = await postForm(`/api/campaigns/${id}/upload`, form);
 			count = result.imported;
 		} catch (e: any) {
@@ -35,6 +38,9 @@
 		<StepHeader step={1} title="Upload contacts" description="Drop a CSV or XLSX with at least email or first + last name + company website." />
 
 		{#if count === null}
+			<div class="flex justify-end mb-3">
+				<LimitInput bind:value={limit} placeholder="All rows" />
+			</div>
 			<DropZone onfile={(f) => { file = f; upload(); }} />
 			{#if file}
 				<p class="text-xs text-neutral-400 mt-3 text-center">{file.name} — {uploading ? 'uploading…' : ''}</p>
