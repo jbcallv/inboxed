@@ -175,11 +175,34 @@ def resume_campaign(campaign_id: str, user: dict = Depends(get_current_user)):
     return {"status": "sending"}
 
 
+def _fetch_all_new(campaign_id: str, limit: int | None = None) -> list[dict]:
+    """Fetches all 'new' contacts for a campaign, paginating past Supabase's 1,000-row cap."""
+    db = get_db()
+    PAGE = 1000
+    rows: list[dict] = []
+    offset = 0
+    while True:
+        remaining = (limit - len(rows)) if limit else PAGE
+        batch_size = min(remaining, PAGE)
+        batch = (
+            db.table("contacts")
+            .select("*")
+            .eq("campaign_id", campaign_id)
+            .eq("status", "new")
+            .order("id")
+            .range(offset, offset + batch_size - 1)
+            .execute()
+            .data
+        )
+        rows.extend(batch)
+        if len(batch) < batch_size or (limit and len(rows) >= limit):
+            break
+        offset += batch_size
+    return rows
+
+
 async def _prep_stream(campaign_id: str, skip_verification: bool = False, limit: int | None = None):
-    q = get_db().table("contacts").select("*").eq("campaign_id", campaign_id).eq("status", "new")
-    if limit:
-        q = q.limit(limit)
-    rows = q.execute().data
+    rows = _fetch_all_new(campaign_id, limit)
     total = len(rows)
     kept = 0
     dropped = 0
