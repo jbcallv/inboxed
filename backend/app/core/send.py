@@ -46,16 +46,9 @@ def _record_success(
     message_id: str | None,
 ) -> None:
     db = get_db()
-    db.table("outreach_emails").insert(
-        {
-            "contact_id": contact.id,
-            "subject": draft.subject,
-            "body": draft.body,
-            "status": "sent",
-            "resend_message_id": message_id,
-            "sent_at": "now()",
-        }
-    ).execute()
+    db.table("outreach_emails").update(
+        {"status": "sent", "resend_message_id": message_id, "sent_at": "now()"}
+    ).eq("contact_id", contact.id).eq("status", "draft").execute()
     db.table("contacts").update(
         {"status": "sent", "domain_id": domain.id}
     ).eq("id", contact.id).execute()
