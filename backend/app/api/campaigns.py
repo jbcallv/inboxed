@@ -175,8 +175,11 @@ def resume_campaign(campaign_id: str, user: dict = Depends(get_current_user)):
     return {"status": "sending"}
 
 
+_PREP_STATUSES = ["new", "enriching", "enriched", "generating"]
+
+
 def _fetch_all_new(campaign_id: str, limit: int | None = None) -> list[dict]:
-    """Fetches all 'new' contacts for a campaign, paginating past Supabase's 1,000-row cap."""
+    """Fetches all contacts eligible for prep, paginating past Supabase's 1,000-row cap."""
     db = get_db()
     PAGE = 1000
     rows: list[dict] = []
@@ -188,7 +191,7 @@ def _fetch_all_new(campaign_id: str, limit: int | None = None) -> list[dict]:
             db.table("contacts")
             .select("*")
             .eq("campaign_id", campaign_id)
-            .eq("status", "new")
+            .in_("status", _PREP_STATUSES)
             .order("id")
             .range(offset, offset + batch_size - 1)
             .execute()
