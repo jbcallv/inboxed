@@ -21,10 +21,12 @@ async def resend_webhook(
 ):
     payload = await request.body()
     if not _verify_signature(payload, svix_id, svix_timestamp, svix_signature):
+        log.warning("Webhook signature verification failed")
         raise HTTPException(400, "Invalid webhook signature")
 
     data = await request.json()
     event_type = data.get("type", "")
+    log.info("Webhook received: %s", event_type)
 
     if event_type == "email.bounced":
         _handle_bounce(data)
@@ -32,6 +34,8 @@ async def resend_webhook(
         _handle_complaint(data)
     elif event_type == "email.delivered":
         _handle_delivered(data)
+    else:
+        log.info("Unhandled webhook event type: %s", event_type)
 
     return {"ok": True}
 
@@ -39,6 +43,7 @@ async def resend_webhook(
 def _handle_bounce(data: dict) -> None:
     email_addr = _extract_email(data)
     message_id = _extract_message_id(data)
+    log.info("Bounce: email=%s message_id=%s", email_addr, message_id)
     if email_addr:
         suppress_module.suppress(email_addr, "bounce")
     if message_id:
@@ -47,8 +52,11 @@ def _handle_bounce(data: dict) -> None:
             "resend_message_id", message_id
         ).execute()
         domain_id = _find_domain_id(db, message_id)
+        log.info("Bounce domain_id=%s", domain_id)
         if domain_id:
             record_bounce(domain_id)
+    else:
+        log.warning("Bounce received but no message_id found in payload")
 
 
 def _handle_complaint(data: dict) -> None:
