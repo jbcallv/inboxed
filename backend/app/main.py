@@ -1,6 +1,10 @@
+import logging
+import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .api import campaigns, contacts, domains, stats, webhooks
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stdout)
 
 app = FastAPI(title="Inboxed", version="0.1.0")
 
