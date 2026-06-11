@@ -51,10 +51,16 @@ def _handle_bounce(data: dict) -> None:
         db.table("outreach_emails").update({"status": "bounced"}).eq(
             "resend_message_id", message_id
         ).execute()
-        domain_id = _find_domain_id(db, message_id)
-        log.info("Bounce domain_id=%s", domain_id)
-        if domain_id:
-            record_bounce(domain_id)
+        email_row = db.table("outreach_emails").select("contact_id").eq(
+            "resend_message_id", message_id
+        ).limit(1).execute()
+        if email_row.data:
+            contact_id = email_row.data[0]["contact_id"]
+            db.table("contacts").update({"status": "bounced"}).eq("id", contact_id).execute()
+            domain_id = _find_domain_id_by_contact(db, contact_id)
+            log.info("Bounce domain_id=%s", domain_id)
+            if domain_id:
+                record_bounce(domain_id)
     else:
         log.warning("Bounce received but no message_id found in payload")
 
@@ -66,9 +72,14 @@ def _handle_complaint(data: dict) -> None:
         suppress_module.suppress(email_addr, "complaint")
     if message_id:
         db = get_db()
-        domain_id = _find_domain_id(db, message_id)
-        if domain_id:
-            record_complaint(domain_id)
+        email_row = db.table("outreach_emails").select("contact_id").eq(
+            "resend_message_id", message_id
+        ).limit(1).execute()
+        if email_row.data:
+            contact_id = email_row.data[0]["contact_id"]
+            domain_id = _find_domain_id_by_contact(db, contact_id)
+            if domain_id:
+                record_complaint(domain_id)
 
 
 def _handle_delivered(data: dict) -> None:
@@ -97,22 +108,6 @@ def _extract_message_id(data: dict) -> str | None:
     return data.get("data", {}).get("email_id")
 
 
-def _find_domain_id(db, message_id: str) -> str | None:
-    email_result = (
-        db.table("outreach_emails")
-        .select("contact_id")
-        .eq("resend_message_id", message_id)
-        .limit(1)
-        .execute()
-    )
-    if not email_result.data:
-        return None
-    contact_id = email_result.data[0]["contact_id"]
-    contact_result = (
-        db.table("contacts")
-        .select("domain_id")
-        .eq("id", contact_id)
-        .limit(1)
-        .execute()
-    )
-    return contact_result.data[0]["domain_id"] if contact_result.data else None
+def _find_domain_id_by_contact(db, contact_id: int) -> str | None:
+    result = db.table("contacts").select("domain_id").eq("id", contact_id).limit(1).execute()
+    return result.data[0]["domain_id"] if result.data else None
