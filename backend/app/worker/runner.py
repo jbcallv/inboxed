@@ -22,6 +22,7 @@ def main() -> None:
         id="tick",
         name="send worker tick",
         max_instances=1,
+        next_run_time=datetime.now(ZoneInfo(settings.send_timezone)),
     )
     scheduler.add_job(
         fetch_and_record_replies,
@@ -29,6 +30,7 @@ def main() -> None:
         id="replies",
         name="Zoho IMAP reply poller",
         max_instances=1,
+        next_run_time=datetime.now(ZoneInfo(settings.send_timezone)),
     )
     scheduler.add_job(
         reset_daily_counts,
