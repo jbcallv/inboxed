@@ -262,12 +262,14 @@ def _process_contact(contact: Contact, skip_verification: bool = False) -> tuple
 
         db.table("contacts").update({"status": "enriching"}).eq("id", contact.id).execute()
         website_text = ""
-        if contact.company_website:
+        if contact.company_website and not contact.bio:
+            # skip scraping when we already have bio context from the CSV
             website_text = enrich_module.scrape_company(contact.company_website)
-            db.table("contact_enrichments").upsert(
-                {"contact_id": contact.id, "website_content": website_text},
-                on_conflict="contact_id",
-            ).execute()
+            if website_text:
+                db.table("contact_enrichments").upsert(
+                    {"contact_id": contact.id, "website_content": website_text},
+                    on_conflict="contact_id",
+                ).execute()
         db.table("contacts").update({"status": "enriched"}).eq("id", contact.id).execute()
 
         db.table("contacts").update({"status": "generating"}).eq("id", contact.id).execute()

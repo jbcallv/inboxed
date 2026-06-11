@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     max_bounce_rate: float = 0.03
     max_complaint_rate: float = 0.0005
 
-    prep_workers: int = 5  # parallel contacts during prep pipeline
+    prep_workers: int = 20  # parallel contacts during prep pipeline
 
     generation_system_prompt: str = GENERATION_SYSTEM_PROMPT
 

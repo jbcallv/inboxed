@@ -9,9 +9,17 @@ _FIELD_ALIASES: dict[str, list[str]] = {
     "company_name":     ["company", "company name", "organization", "organisation", "org", "name"],
     "company_website":  ["website", "company website", "url", "site"],
     "position":         ["title", "job title", "jobtitle", "role", "position"],
-    "bio":              ["bio", "about", "description", "summary"],
+    "bio":              ["bio", "about", "description", "summary", "matchmaking_message", "match_message"],
     "email":            ["email", "email address", "e-mail", "emailaddress"],
 }
+
+# Extra columns used only to build a synthetic bio — not stored as their own fields
+_BIO_SUPPLEMENT_COLS = [
+    "category", "subtypes",
+    "company_insights.industry", "company_insights.employees", "company_insights.revenue",
+    "company_insights.founded_year",
+    "state", "city",
+]
 
 _KNOWN_FIELDS = set(_FIELD_ALIASES)
 
@@ -21,18 +29,24 @@ def parse_upload(
     filename: str,
     column_map: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
-    """
-    Parses CSV or XLSX bytes into a list of contact dicts.
-    column_map overrides auto-detection: keys are canonical field names,
-    values are the source column headers.
-    """
     if filename.lower().endswith(".xlsx"):
         rows, headers = _parse_xlsx(content)
     else:
         rows, headers = _parse_csv(content)
 
     mapping = column_map or _detect_mapping(headers)
-    return [_map_row(row, mapping) for row in rows if _has_useful_data(row, mapping)]
+    supplement_map = _detect_supplement_cols(headers)
+    result = []
+    for row in rows:
+        if not _has_useful_data(row, mapping):
+            continue
+        contact = _map_row(row, mapping)
+        if not contact.get("bio"):
+            synth = _synthesize_bio(row, supplement_map)
+            if synth:
+                contact["bio"] = synth
+        result.append(contact)
+    return result
 
 
 def _parse_csv(content: bytes) -> tuple[list[dict], list[str]]:
@@ -58,7 +72,6 @@ def _parse_xlsx(content: bytes) -> tuple[list[dict], list[str]]:
 
 
 def _detect_mapping(headers: list[str]) -> dict[str, str]:
-    """Returns {canonical_field: source_header} for matched columns."""
     normalised = {h: h.strip().lower() for h in headers}
     mapping: dict[str, str] = {}
     for field, aliases in _FIELD_ALIASES.items():
@@ -69,14 +82,48 @@ def _detect_mapping(headers: list[str]) -> dict[str, str]:
     return mapping
 
 
+def _detect_supplement_cols(headers: list[str]) -> dict[str, str]:
+    """Returns {canonical_supplement_name: actual_header} for bio-supplement columns."""
+    lower = {h.strip().lower(): h for h in headers}
+    found = {}
+    for col in _BIO_SUPPLEMENT_COLS:
+        if col in lower:
+            found[col] = lower[col]
+    return found
+
+
 def _map_row(row: dict, mapping: dict[str, str]) -> dict[str, Any]:
     return {
-        field: row.get(source_header, "").strip()
+        field: (row.get(source_header) or "").strip()
         for field, source_header in mapping.items()
     }
 
 
 def _has_useful_data(row: dict, mapping: dict[str, str]) -> bool:
-    # Must have an email — useless without one for cold outreach
     email_col = mapping.get("email", "")
-    return bool(row.get(email_col, "").strip())
+    return bool((row.get(email_col) or "").strip())
+
+
+def _synthesize_bio(row: dict, supplement_map: dict[str, str]) -> str:
+    """Builds a bio string from supplemental columns when no explicit bio exists."""
+    parts = []
+    for col in _BIO_SUPPLEMENT_COLS:
+        header = supplement_map.get(col)
+        if not header:
+            continue
+        val = (row.get(header) or "").strip()
+        if not val or val.lower() in ("none", "null", "false", "true"):
+            continue
+        if col == "company_insights.employees":
+            parts.append(f"~{val} employees")
+        elif col == "company_insights.revenue":
+            try:
+                rev = int(float(val))
+                parts.append(f"~${rev:,} revenue")
+            except ValueError:
+                pass
+        elif col == "company_insights.founded_year":
+            parts.append(f"founded {val}")
+        else:
+            parts.append(val)
+    return " | ".join(parts)

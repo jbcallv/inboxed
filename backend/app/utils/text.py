@@ -1,17 +1,32 @@
 import re
 from bs4 import BeautifulSoup
 
+_STRIP_TAGS = [
+    "script", "style", "nav", "footer", "header",
+    "form", "button", "input", "select", "option",
+    "img", "svg", "iframe", "noscript", "aside",
+]
+
 
 def html_to_text(html: str) -> str:
     soup = BeautifulSoup(html, "html.parser")
-    for tag in soup(["script", "style", "nav", "footer", "header"]):
+    for tag in soup(_STRIP_TAGS):
         tag.decompose()
-    text = soup.get_text(separator=" ")
-    return _collapse_whitespace(text)
 
+    # Prefer semantic content blocks when present
+    main = (
+        soup.find(["main", "article"])
+        or soup.find(id=re.compile(r"about|content|main", re.I))
+    )
+    target = main or soup.body or soup
 
-def _collapse_whitespace(text: str) -> str:
-    text = re.sub(r"[ \t]+", " ", text)
+    lines = []
+    for line in target.get_text(separator="\n").splitlines():
+        line = line.strip()
+        if len(line) >= 30:  # drop nav links, button labels, lone words
+            lines.append(line)
+
+    text = "\n".join(lines)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
