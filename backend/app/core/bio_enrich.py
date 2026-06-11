@@ -31,14 +31,17 @@ def build_narrative_bio(contact: Contact) -> str:
 
     prompt = (
         f"{header}\n"
-        f"Structured data: {structured}\n\n"
-        "Write a 2-sentence professional bio paragraph. Be specific and factual. No fluff."
+        f"Data: {structured}\n\n"
+        "Write 2 sentences summarizing only what the data above explicitly states. "
+        "Do not invent, infer, or add any details not present in the data. "
+        "No generic phrases like 'personalized service', 'reliable', 'dedicated', or 'committed'. "
+        "If a fact is not in the data, do not mention it. Plain prose, no headers, no bullet points."
     )
 
     try:
         msg = _get_client().messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=200,
+            max_tokens=150,
             messages=[{"role": "user", "content": prompt}],
         )
         return msg.content[0].text.strip()
