@@ -9,7 +9,8 @@ from .tick import tick
 from .warmup import reset_daily_counts
 from ..core.replies import fetch_and_record_replies
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+import sys
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stdout)
 log = logging.getLogger(__name__)
 
 
