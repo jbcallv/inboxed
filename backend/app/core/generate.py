@@ -13,9 +13,9 @@ def _get_client() -> anthropic.Anthropic:
     return _client
 
 
-def generate_email(contact: Contact, website_text: str) -> Draft | None:
+def generate_email(contact: Contact, website_text: str, narrative_bio: str = "") -> Draft | None:
     """Calls Claude with the proven prompt. Returns Draft or None on parse failure."""
-    user_message = _build_user_message(contact, website_text)
+    user_message = _build_user_message(contact, website_text, narrative_bio)
     client = _get_client()
 
     message = client.messages.create(
@@ -35,14 +35,17 @@ def generate_email(contact: Contact, website_text: str) -> Draft | None:
     return _parse_draft(raw)
 
 
-def _build_user_message(contact: Contact, website_text: str) -> str:
+def _build_user_message(contact: Contact, website_text: str, narrative_bio: str = "") -> str:
+    name = f"{contact.first_name} {contact.last_name}".strip() or contact.company_name or "Unknown"
     parts = [
-        f"Prospect: {contact.first_name} {contact.last_name}",
+        f"Prospect: {name}",
         f"Role: {contact.position or 'Unknown'}",
         f"Company: {contact.company_name or 'Unknown'}",
         f"Website: {contact.company_website or 'Unknown'}",
     ]
-    if contact.bio:
+    if narrative_bio:
+        parts.append(f"Profile: {narrative_bio}")
+    elif contact.bio:
         parts.append(f"Bio: {contact.bio}")
     if website_text:
         parts.append(f"\nWebsite excerpt:\n{website_text[:2000]}")

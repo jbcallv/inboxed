@@ -14,6 +14,7 @@ from ..core import (
     enrich as enrich_module,
     generate as generate_module,
     finder as finder_module,
+    bio_enrich as bio_enrich_module,
 )
 from .auth import get_current_user
 
@@ -273,7 +274,8 @@ def _process_contact(contact: Contact, skip_verification: bool = False) -> tuple
         db.table("contacts").update({"status": "enriched"}).eq("id", contact.id).execute()
 
         db.table("contacts").update({"status": "generating"}).eq("id", contact.id).execute()
-        draft = generate_module.generate_email(contact, website_text)
+        narrative_bio = bio_enrich_module.build_narrative_bio(contact)
+        draft = generate_module.generate_email(contact, website_text, narrative_bio)
         if draft:
             db.table("outreach_emails").insert(
                 {"contact_id": contact.id, "subject": draft.subject, "body": draft.body, "status": "draft"}
