@@ -141,6 +141,10 @@
 				class="block border border-neutral-200 rounded-lg px-4 py-3 text-sm text-neutral-700 hover:border-neutral-300 hover:bg-white transition-colors bg-neutral-50">
 				View contacts
 			</a>
+			<a href="/campaigns/{id}/emails"
+				class="block border border-neutral-200 rounded-lg px-4 py-3 text-sm text-neutral-700 hover:border-neutral-300 hover:bg-white transition-colors bg-neutral-50">
+				View sent emails & replies
+			</a>
 		</div>
 	{:else}
 		<p class="text-sm text-neutral-400">Loading…</p>

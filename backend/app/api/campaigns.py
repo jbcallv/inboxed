@@ -121,6 +121,53 @@ def list_contacts(
     return result.data
 
 
+_SENT_STATUSES = ["sent", "replied", "hot_lead", "unsubscribed", "bounced"]
+
+
+@router.get("/{campaign_id}/emails")
+def list_emails(
+    campaign_id: str,
+    status: str | None = None,
+    search: str | None = None,
+    page: int = 1,
+    limit: int = 50,
+    user: dict = Depends(get_current_user),
+):
+    _assert_owns(campaign_id, user)
+    db = get_db()
+    statuses = [status] if status else _SENT_STATUSES
+    q = (
+        db.table("contacts")
+        .select("id,first_name,last_name,company_name,email,status,outreach_emails(subject,body,status),responses(sentiment,is_hot_lead,reply_body,received_at)")
+        .eq("campaign_id", campaign_id)
+        .in_("status", statuses)
+        .order("id")
+        .range((page - 1) * limit, page * limit - 1)
+    )
+    if search:
+        q = q.ilike("email", f"%{search}%")
+    return q.execute().data
+
+
+@router.get("/{campaign_id}/emails/count")
+def count_emails(
+    campaign_id: str,
+    status: str | None = None,
+    user: dict = Depends(get_current_user),
+):
+    _assert_owns(campaign_id, user)
+    db = get_db()
+    statuses = [status] if status else _SENT_STATUSES
+    result = (
+        db.table("contacts")
+        .select("id", count="exact")
+        .eq("campaign_id", campaign_id)
+        .in_("status", statuses)
+        .execute()
+    )
+    return {"count": result.count or 0}
+
+
 @router.get("/{campaign_id}/sample")
 def get_sample(campaign_id: str, n: int = 5, user: dict = Depends(get_current_user)):
     import random
