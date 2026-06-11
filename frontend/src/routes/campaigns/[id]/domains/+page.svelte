@@ -20,7 +20,7 @@
 	const hasDomains = $derived(domains.length > 0);
 
 	onMount(async () => {
-		domains = await get('/api/domains').catch(() => []);
+		domains = await get(`/api/domains?campaign_id=${id}`).catch(() => []);
 	});
 
 	async function suggest() {
@@ -34,11 +34,12 @@
 		if (!newDomain.domain || !newDomain.from_name) return;
 		adding = true;
 		await post('/api/domains', {
+			campaign_id: id,
 			domain: newDomain.domain,
 			from_name: newDomain.from_name,
 			from_locals: newDomain.from_locals.split(',').map((s: string) => s.trim()).filter(Boolean)
 		});
-		domains = await get('/api/domains').catch(() => []);
+		domains = await get(`/api/domains?campaign_id=${id}`).catch(() => []);
 		newDomain = { domain: '', from_name: '', from_locals: '' };
 		adding = false;
 		addOpen = false;

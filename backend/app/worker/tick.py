@@ -17,31 +17,41 @@ def tick() -> None:
     if not within_send_window():
         return
 
-    for domain in active_domains():
-        budget = remaining_today(domain)
-        if budget <= 0:
-            continue
-
-        contacts = claim_queued(budget)
-        for contact in contacts:
-            draft = draft_for(contact)
-            if draft is None:
-                _mark_failed(contact)
+    for campaign_id in _sending_campaign_ids():
+        for domain in active_domains(campaign_id):
+            budget = remaining_today(domain)
+            if budget <= 0:
                 continue
 
-            result = send_one(domain, contact, draft)
-            if not result.success:
-                log.warning("Send failed for contact %s: %s", contact.id, result.error)
-                _mark_failed(contact)
+            contacts = claim_queued(budget, campaign_id)
+            for contact in contacts:
+                draft = draft_for(contact)
+                if draft is None:
+                    _mark_failed(contact)
+                    continue
 
-            time.sleep(jitter())
+                result = send_one(domain, contact, draft)
+                if not result.success:
+                    log.warning("Send failed for contact %s: %s", contact.id, result.error)
+                    _mark_failed(contact)
+
+                time.sleep(jitter())
 
     check_and_pause_domains()
 
 
-def claim_queued(budget: int) -> list[Contact]:
+def _sending_campaign_ids() -> list[str]:
     db = get_db()
-    result = db.rpc("claim_queued_contacts", {"p_budget": budget}).execute()
+    result = db.table("campaigns").select("id").eq("status", "sending").execute()
+    return [row["id"] for row in result.data]
+
+
+def claim_queued(budget: int, campaign_id: str | None = None) -> list[Contact]:
+    db = get_db()
+    params: dict = {"p_budget": budget}
+    if campaign_id:
+        params["p_campaign_id"] = campaign_id
+    result = db.rpc("claim_queued_contacts", params).execute()
     return [Contact(**row) for row in result.data]
 
 

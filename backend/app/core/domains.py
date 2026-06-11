@@ -4,15 +4,12 @@ from ..config import settings
 from .models import SendingDomain
 
 
-def active_domains() -> list[SendingDomain]:
+def active_domains(campaign_id: str | None = None) -> list[SendingDomain]:
     db = get_db()
-    result = (
-        db.table("sending_domains")
-        .select("*")
-        .in_("status", ["warming", "active"])
-        .execute()
-    )
-    return [SendingDomain(**row) for row in result.data]
+    q = db.table("sending_domains").select("*").in_("status", ["warming", "active"])
+    if campaign_id:
+        q = q.eq("campaign_id", campaign_id)
+    return [SendingDomain(**row) for row in q.execute().data]
 
 
 def cap_today(domain: SendingDomain) -> int:

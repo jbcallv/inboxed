@@ -10,6 +10,7 @@ router = APIRouter(prefix="/domains", tags=["domains"])
 
 
 class DomainCreate(BaseModel):
+    campaign_id: str
     domain: str
     from_name: str
     from_locals: list[str]
@@ -20,12 +21,28 @@ class SuggestRequest(BaseModel):
 
 
 @router.get("")
-def list_domains(user: dict = Depends(get_current_user)):
+def list_domains(campaign_id: str, user: dict = Depends(get_current_user)):
     db = get_db()
-    domains = db.table("sending_domains").select("*").execute().data
+    domains = (
+        db.table("sending_domains")
+        .select("*")
+        .eq("campaign_id", campaign_id)
+        .execute()
+        .data
+    )
     today = date.today().isoformat()
-    stats = db.table("domain_daily_stats").select("domain_id,sent_count").eq("date", today).execute().data
-    stats_map = {s["domain_id"]: s["sent_count"] for s in stats}
+    domain_ids = [d["id"] for d in domains]
+    stats_map: dict = {}
+    if domain_ids:
+        stats = (
+            db.table("domain_daily_stats")
+            .select("domain_id,sent_count")
+            .eq("date", today)
+            .in_("domain_id", domain_ids)
+            .execute()
+            .data
+        )
+        stats_map = {s["domain_id"]: s["sent_count"] for s in stats}
     for d in domains:
         d["sent_today"] = stats_map.get(d["id"], 0)
         d["cap_today"] = _warmup_cap(d)
@@ -37,6 +54,7 @@ def add_domain(body: DomainCreate, user: dict = Depends(get_current_user)):
     db = get_db()
     result = db.table("sending_domains").insert(
         {
+            "campaign_id": body.campaign_id,
             "domain": body.domain,
             "from_name": body.from_name,
             "from_locals": body.from_locals,

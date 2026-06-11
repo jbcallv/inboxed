@@ -16,7 +16,7 @@
 	async function refresh() {
 		[stats, domains] = await Promise.all([
 			get(`/api/campaigns/${id}/stats`).catch(() => null),
-			get('/api/domains').catch(() => [])
+			get(`/api/domains?campaign_id=${id}`).catch(() => [])
 		]);
 	}
 
