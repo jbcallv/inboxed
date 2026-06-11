@@ -152,9 +152,7 @@ def get_sample(campaign_id: str, n: int = 5, user: dict = Depends(get_current_us
 def launch_campaign(campaign_id: str, user: dict = Depends(get_current_user)):
     _assert_owns(campaign_id, user)
     db = get_db()
-    db.table("contacts").update({"status": "queued"}).eq(
-        "campaign_id", campaign_id
-    ).eq("status", "drafted").execute()
+    _bulk_status_update(db, campaign_id, from_status="drafted", to_status="queued")
     db.table("campaigns").update({"status": "sending"}).eq("id", campaign_id).execute()
     return {"status": "sending"}
 
@@ -313,6 +311,28 @@ def _process_contact(contact: Contact, skip_verification: bool = False) -> tuple
     except Exception as exc:
         log.error("Prep error for contact %s: %s", contact.id, exc)
         return contact, warning
+
+
+def _bulk_status_update(db, campaign_id: str, from_status: str, to_status: str) -> None:
+    """Updates all contacts from one status to another, paginating past the 1,000-row cap."""
+    PAGE = 1000
+    while True:
+        ids = (
+            db.table("contacts")
+            .select("id")
+            .eq("campaign_id", campaign_id)
+            .eq("status", from_status)
+            .limit(PAGE)
+            .execute()
+            .data
+        )
+        if not ids:
+            break
+        db.table("contacts").update({"status": to_status}).in_(
+            "id", [r["id"] for r in ids]
+        ).execute()
+        if len(ids) < PAGE:
+            break
 
 
 def _domain_from_website(website: str | None) -> str:
