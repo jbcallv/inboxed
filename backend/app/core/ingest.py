@@ -15,10 +15,12 @@ _FIELD_ALIASES: dict[str, list[str]] = {
 
 # Extra columns used only to build a synthetic bio — not stored as their own fields
 _BIO_SUPPLEMENT_COLS = [
-    "category", "subtypes",
+    "subtypes",
     "company_insights.industry", "company_insights.employees", "company_insights.revenue",
     "company_insights.founded_year",
-    "state", "city",
+    "city", "state",
+    "rating", "reviews",
+    "contact_linkedin",
 ]
 
 _KNOWN_FIELDS = set(_FIELD_ALIASES)
@@ -124,6 +126,19 @@ def _synthesize_bio(row: dict, supplement_map: dict[str, str]) -> str:
                 pass
         elif col == "company_insights.founded_year":
             parts.append(f"founded {val}")
+        elif col == "rating":
+            reviews_header = supplement_map.get("reviews")
+            reviews_val = (row.get(reviews_header) or "").strip() if reviews_header else ""
+            try:
+                stars = float(val)
+                suffix = f" ({int(float(reviews_val))} reviews)" if reviews_val else ""
+                parts.append(f"{stars}/5 stars{suffix}")
+            except ValueError:
+                pass
+        elif col == "reviews":
+            continue  # handled inside rating block above
+        elif col == "contact_linkedin":
+            parts.append(f"LinkedIn: {val}")
         else:
             parts.append(val)
     return " | ".join(parts)
