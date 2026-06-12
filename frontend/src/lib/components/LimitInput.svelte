@@ -9,6 +9,6 @@
 		min="1"
 		bind:value
 		{placeholder}
-		class="w-24 border border-neutral-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-neutral-400 text-neutral-700"
+		class="w-32 border border-neutral-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-neutral-400 text-neutral-700"
 	/>
 </div>
