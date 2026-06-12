@@ -27,7 +27,7 @@
 	onMount(async () => {
 		[, domains] = await Promise.all([
 			loadSample(),
-			get('/api/domains').catch(() => [])
+			get(`/api/domains?campaign_id=${id}`).catch(() => [])
 		]);
 	});
 
