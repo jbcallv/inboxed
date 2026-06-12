@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { get, post } from '$lib/api';
+	import { get } from '$lib/api';
 	import Card from '$lib/components/Card.svelte';
 	import StepHeader from '$lib/components/StepHeader.svelte';
 	import EmailPreviewCard from '$lib/components/EmailPreviewCard.svelte';
@@ -14,9 +13,7 @@
 	let loading = $state(true);
 	let sampleSize = $state(5);
 
-	const hasDomains = $derived(domains.length > 0);
 	const hasEmails = $derived(emails.length > 0);
-	const canLaunch = $derived(hasDomains && hasEmails);
 
 	async function loadSample() {
 		loading = true;
@@ -24,68 +21,40 @@
 		loading = false;
 	}
 
-	onMount(async () => {
-		[, domains] = await Promise.all([
-			loadSample(),
-			get(`/api/domains?campaign_id=${id}`).catch(() => [])
-		]);
-	});
-
-	async function launch() {
-		await post(`/api/campaigns/${id}/launch`);
-		goto(`/campaigns/${id}`);
-	}
+	onMount(loadSample);
 </script>
 
 <div class="max-w-2xl mx-auto py-16 px-4">
 	<Card class="mb-6">
-		<StepHeader step={3} title="Review sample" description="A random sample of generated emails. Approve to queue all drafted contacts for sending." />
+		<StepHeader step={4} title="Review sample" description="A random sample of generated emails. Browse before configuring domains and launching." />
 
-		{#if !loading}
-			{#if !hasEmails}
-				<div class="p-3 bg-neutral-50 border border-neutral-200 rounded-lg text-sm text-neutral-600 mb-4">
-					No emails generated yet. Return to step 2 to run verification and generation.
-				</div>
-			{/if}
-			{#if !hasDomains}
-				<div class="p-3 bg-neutral-50 border border-neutral-200 rounded-lg text-sm text-neutral-600 mb-4">
-					No sending domains configured.
-					<a href="/campaigns/{id}/domains" class="underline font-medium">Add one in step 4</a>
-					before launching.
-				</div>
-			{/if}
+		{#if !loading && !hasEmails}
+			<div class="p-3 bg-neutral-50 border border-neutral-200 rounded-lg text-sm text-neutral-600 mb-4">
+				No emails generated yet. Return to step 3 to generate.
+			</div>
 		{/if}
 
-		<div class="flex items-center justify-between gap-3">
-			<div class="flex items-center gap-2">
-				<span class="text-xs text-neutral-400">Show</span>
-				{#each [3, 5, 10, 20] as n}
-					<button
-						onclick={() => { sampleSize = n; loadSample(); }}
-						class="px-2.5 py-1 rounded text-xs font-medium border transition-colors
-							{sampleSize === n
-								? 'bg-neutral-900 text-white border-neutral-900'
-								: 'bg-white text-neutral-500 border-neutral-200 hover:border-neutral-400'}"
-					>{n}</button>
-				{/each}
+		<div class="flex items-center gap-2">
+			<span class="text-xs text-neutral-400">Show</span>
+			{#each [3, 5, 10, 20] as n}
 				<button
-					onclick={loadSample}
-					class="px-2.5 py-1 rounded text-xs border border-neutral-200 text-neutral-500 hover:border-neutral-400 transition-colors">
-					Reshuffle
-				</button>
-			</div>
+					onclick={() => { sampleSize = n; loadSample(); }}
+					class="px-2.5 py-1 rounded text-xs font-medium border transition-colors
+						{sampleSize === n
+							? 'bg-neutral-900 text-white border-neutral-900'
+							: 'bg-white text-neutral-500 border-neutral-200 hover:border-neutral-400'}"
+				>{n}</button>
+			{/each}
 			<button
-				onclick={launch}
-				disabled={!canLaunch}
-				class="px-5 py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
-			>
-				{canLaunch ? 'Approve and launch all' : 'Cannot launch yet'}
+				onclick={loadSample}
+				class="px-2.5 py-1 rounded text-xs border border-neutral-200 text-neutral-500 hover:border-neutral-400 transition-colors">
+				Reshuffle
 			</button>
 		</div>
 		<StepNav
 			campaignId={id}
-			prev={{ href: `/campaigns/${id}/verify`, label: '← Re-generate' }}
-			next={{ href: `/campaigns/${id}/domains`, label: 'Configure domains' }}
+			prev={{ href: `/campaigns/${id}/generate`, label: '← Generate' }}
+			next={{ href: `/campaigns/${id}/domains`, label: 'Configure domains →' }}
 		/>
 	</Card>
 

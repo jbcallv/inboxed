@@ -49,7 +49,7 @@
 <div class="max-w-2xl mx-auto py-16 px-4">
 	<Card class="mb-6">
 		<StepHeader
-			step={4}
+			step={5}
 			title="Sending domains"
 			description="Each domain sends up to 250/day at steady state. 15–20 domains = ~4,500/day. Speed scales with domain count only."
 		/>
@@ -135,6 +135,6 @@
 	<StepNav
 		campaignId={id}
 		prev={{ href: `/campaigns/${id}/sample`, label: '← Review sample' }}
-		next={{ href: `/campaigns/${id}/monitor`, label: 'Monitor', disabled: !hasDomains }}
+		next={{ href: `/campaigns/${id}/monitor`, label: 'Launch & monitor →', disabled: !hasDomains }}
 	/>
 </div>

@@ -123,19 +123,23 @@
 			</a>
 			<a href="/campaigns/{id}/verify"
 				class="block border border-neutral-200 rounded-lg px-4 py-3 text-sm text-neutral-700 hover:border-neutral-300 hover:bg-white transition-colors bg-neutral-50">
-				2. Verify + generate
+				2. Verify emails
+			</a>
+			<a href="/campaigns/{id}/generate"
+				class="block border border-neutral-200 rounded-lg px-4 py-3 text-sm text-neutral-700 hover:border-neutral-300 hover:bg-white transition-colors bg-neutral-50">
+				3. Generate emails
 			</a>
 			<a href="/campaigns/{id}/sample"
 				class="block border border-neutral-200 rounded-lg px-4 py-3 text-sm text-neutral-700 hover:border-neutral-300 hover:bg-white transition-colors bg-neutral-50">
-				3. Review sample
+				4. Review sample
 			</a>
 			<a href="/campaigns/{id}/domains"
 				class="block border border-neutral-200 rounded-lg px-4 py-3 text-sm text-neutral-700 hover:border-neutral-300 hover:bg-white transition-colors bg-neutral-50">
-				4. Configure domains
+				5. Configure domains
 			</a>
 			<a href="/campaigns/{id}/monitor"
 				class="block border border-neutral-200 rounded-lg px-4 py-3 text-sm text-neutral-700 hover:border-neutral-300 hover:bg-white transition-colors bg-neutral-50">
-				5. Monitor
+				6. Launch & monitor
 			</a>
 			<a href="/campaigns/{id}/contacts"
 				class="block border border-neutral-200 rounded-lg px-4 py-3 text-sm text-neutral-700 hover:border-neutral-300 hover:bg-white transition-colors bg-neutral-50">

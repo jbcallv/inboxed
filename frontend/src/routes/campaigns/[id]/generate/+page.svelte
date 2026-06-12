@@ -17,19 +17,16 @@
 	let kept = $state(0);
 	let dropped = $state(0);
 	let finished = $state(false);
-	let warning = $state('');
 	let error = $state('');
-	let skipVerification = $state(false);
 	let limit = $state<number | null>(null);
 
-	async function startVerify() {
+	async function startGenerate() {
 		running = true;
 		error = '';
-		warning = '';
 		const token = await getToken();
-		const params = new URLSearchParams({ skip_verification: String(skipVerification) });
+		const params = new URLSearchParams();
 		if (limit) params.set('limit', String(limit));
-		const url = `${BASE}/api/campaigns/${id}/verify?${params}`;
+		const url = `${BASE}/api/campaigns/${id}/generate?${params}`;
 		let res: Response;
 		try {
 			res = await fetch(url, {
@@ -56,7 +53,6 @@
 						done = event.done;
 						kept = event.kept ?? kept;
 						dropped = event.dropped ?? dropped;
-						if (event.warning) warning = event.warning;
 					}
 					if (event.event === 'done') {
 						kept = event.kept ?? kept;
@@ -73,61 +69,42 @@
 <div class="max-w-2xl mx-auto py-16 px-4">
 	<Card>
 		<StepHeader
-			step={2}
-			title="Verify emails"
-			description="Local prefilter then MillionVerifier. Only contacts with result 'ok' proceed to generation."
+			step={3}
+			title="Generate emails"
+			description="Enriches verified contacts and generates personalized cold emails via Claude."
 		/>
 
 		{#if !running && !finished}
-			<div class="mb-5 space-y-3">
-				<div class="border border-neutral-100 rounded-lg p-4">
-					<label class="flex items-start gap-3 cursor-pointer">
-						<input type="checkbox" bind:checked={skipVerification} class="mt-0.5" />
-						<div>
-							<p class="text-sm text-neutral-700 font-medium">Skip MillionVerifier</p>
-							<p class="text-xs text-neutral-400 mt-0.5">Bypasses MV — use only for testing or if MV is unavailable.</p>
-						</div>
-					</label>
-				</div>
-				<div class="flex items-center justify-between">
-					<LimitInput bind:value={limit} placeholder="All contacts" />
-					<button
-						onclick={startVerify}
-						class="px-5 py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium"
-					>
-						Start verification
-					</button>
-				</div>
+			<div class="mb-5 flex items-center justify-between">
+				<LimitInput bind:value={limit} placeholder="All verified" />
+				<button
+					onclick={startGenerate}
+					class="px-5 py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium"
+				>
+					Generate emails
+				</button>
 			</div>
 		{:else}
 			<div class="space-y-4">
-				<ProgressLine value={done} max={total || 1} label="contacts verified" />
+				<ProgressLine value={done} max={total || 1} label="emails generated" />
 				<div class="flex gap-6 text-sm text-neutral-500">
 					<span><span class="font-medium text-neutral-900">{done}</span> processed</span>
-					<span><span class="font-medium text-green-700">{kept}</span> verified</span>
-					<span><span class="font-medium text-red-500">{dropped}</span> rejected</span>
+					<span><span class="font-medium text-green-700">{kept}</span> drafted</span>
 					<span class="ml-auto text-neutral-400">{total} total</span>
 				</div>
 			</div>
 
-			{#if warning}
-				<div class="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-					{warning}
-				</div>
-			{/if}
-
 			{#if finished}
 				<div class="mt-6 pt-6 border-t border-neutral-100">
 					<p class="text-sm text-neutral-500 mb-4">
-						Done — <span class="font-medium text-green-700">{kept}</span> verified,
-						<span class="font-medium text-red-500">{dropped}</span> rejected.
+						Done — <span class="font-medium text-green-700">{kept}</span> emails drafted.
 					</p>
 					<div class="flex justify-end">
 						<button
-							onclick={() => goto(`/campaigns/${id}/generate`)}
+							onclick={() => goto(`/campaigns/${id}/sample`)}
 							class="px-5 py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium"
 						>
-							Generate emails →
+							Review sample →
 						</button>
 					</div>
 				</div>
@@ -139,8 +116,8 @@
 		{/if}
 		<StepNav
 			campaignId={id}
-			prev={{ href: `/campaigns/${id}/upload`, label: '← Upload' }}
-			next={{ href: `/campaigns/${id}/generate`, label: 'Generate emails', disabled: !finished }}
+			prev={{ href: `/campaigns/${id}/verify`, label: '← Verify' }}
+			next={{ href: `/campaigns/${id}/sample`, label: 'Review sample', disabled: !finished }}
 		/>
 	</Card>
 </div>

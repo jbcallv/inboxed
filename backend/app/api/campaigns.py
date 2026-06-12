@@ -90,17 +90,32 @@ def upload_contacts(
     return {"imported": len(to_insert)}
 
 
-@router.post("/{campaign_id}/prep")
-async def prep_campaign(
+@router.post("/{campaign_id}/verify")
+async def verify_campaign(
     campaign_id: str,
     skip_verification: bool = False,
     limit: int | None = None,
     user: dict = Depends(get_current_user),
 ):
     _assert_owns(campaign_id, user)
-    get_db().table("campaigns").update({"status": "prepping"}).eq("id", campaign_id).execute()
+    get_db().table("campaigns").update({"status": "verifying"}).eq("id", campaign_id).execute()
     return StreamingResponse(
-        _prep_stream(campaign_id, skip_verification, limit), media_type="text/event-stream"
+        _stream_workers(campaign_id, _VERIFY_STATUSES, _verify_contact, skip_verification, limit, "verified"),
+        media_type="text/event-stream",
+    )
+
+
+@router.post("/{campaign_id}/generate")
+async def generate_campaign(
+    campaign_id: str,
+    limit: int | None = None,
+    user: dict = Depends(get_current_user),
+):
+    _assert_owns(campaign_id, user)
+    get_db().table("campaigns").update({"status": "generating"}).eq("id", campaign_id).execute()
+    return StreamingResponse(
+        _stream_workers(campaign_id, _GENERATE_STATUSES, _generate_contact, False, limit, "ready"),
+        media_type="text/event-stream",
     )
 
 
@@ -220,11 +235,12 @@ def resume_campaign(campaign_id: str, user: dict = Depends(get_current_user)):
     return {"status": "sending"}
 
 
-_PREP_STATUSES = ["new", "enriching", "enriched", "generating"]
+_VERIFY_STATUSES = ["new", "finding", "verifying"]
+_GENERATE_STATUSES = ["verified", "enriching", "enriched", "generating"]
 
 
-def _fetch_all_new(campaign_id: str, limit: int | None = None) -> list[dict]:
-    """Fetches all contacts eligible for prep, paginating past Supabase's 1,000-row cap."""
+def _fetch_contacts(campaign_id: str, statuses: list[str], limit: int | None = None) -> list[dict]:
+    """Fetches contacts by status list, paginating past Supabase's 1,000-row cap."""
     db = get_db()
     PAGE = 1000
     rows: list[dict] = []
@@ -236,7 +252,7 @@ def _fetch_all_new(campaign_id: str, limit: int | None = None) -> list[dict]:
             db.table("contacts")
             .select("*")
             .eq("campaign_id", campaign_id)
-            .in_("status", _PREP_STATUSES)
+            .in_("status", statuses)
             .order("id")
             .range(offset, offset + batch_size - 1)
             .execute()
@@ -249,8 +265,15 @@ def _fetch_all_new(campaign_id: str, limit: int | None = None) -> list[dict]:
     return rows
 
 
-async def _prep_stream(campaign_id: str, skip_verification: bool = False, limit: int | None = None):
-    rows = _fetch_all_new(campaign_id, limit)
+async def _stream_workers(
+    campaign_id: str,
+    statuses: list[str],
+    worker_fn,
+    skip_verification: bool,
+    limit: int | None,
+    done_campaign_status: str,
+):
+    rows = _fetch_contacts(campaign_id, statuses, limit)
     total = len(rows)
     kept = 0
     dropped = 0
@@ -266,11 +289,9 @@ async def _prep_stream(campaign_id: str, skip_verification: bool = False, limit:
     async def run_one(row: dict) -> None:
         async with semaphore:
             try:
-                result = await loop.run_in_executor(
-                    None, _process_contact, Contact(**row), skip_verification
-                )
+                result = await loop.run_in_executor(None, worker_fn, Contact(**row), skip_verification)
             except Exception as exc:
-                log.error("Unhandled prep worker error: %s", exc)
+                log.error("Worker error: %s", exc)
                 result = (Contact(**row), "")
             await queue.put(result)
 
@@ -281,7 +302,7 @@ async def _prep_stream(campaign_id: str, skip_verification: bool = False, limit:
         done += 1
         if warning:
             last_warning = warning
-        if contact.status in ("drafted", "queued", "verified", "enriched", "enriching", "generating"):
+        if contact.status in ("verified", "drafted", "enriching", "enriched", "generating"):
             kept += 1
         elif contact.status in ("rejected", "no_email"):
             dropped += 1
@@ -292,15 +313,11 @@ async def _prep_stream(campaign_id: str, skip_verification: bool = False, limit:
         yield _sse(payload)
 
     await asyncio.gather(*tasks)
-    get_db().table("campaigns").update({"status": "ready"}).eq("id", campaign_id).execute()
+    get_db().table("campaigns").update({"status": done_campaign_status}).eq("id", campaign_id).execute()
     yield _sse({"event": "done", "kept": kept, "dropped": dropped})
 
 
-def _process_contact(contact: Contact, skip_verification: bool = False) -> tuple[Contact, str]:
-    """
-    Runs in a worker thread — calls get_db() to get this thread's own client.
-    Returns (updated_contact, warning_message).
-    """
+def _verify_contact(contact: Contact, skip_verification: bool = False) -> tuple[Contact, str]:
     db = get_db()
     warning = ""
     try:
@@ -317,23 +334,32 @@ def _process_contact(contact: Contact, skip_verification: bool = False) -> tuple
 
         if skip_verification:
             db.table("contacts").update({"status": "verified", "mv_result": "skipped"}).eq("id", contact.id).execute()
-            contact = contact.model_copy(update={"status": "verified", "mv_result": "skipped"})
-        else:
-            db.table("contacts").update({"status": "verifying"}).eq("id", contact.id).execute()
-            try:
-                contact = verify_module.verify_contact(contact.model_copy(update={"status": "verifying"}))
-            except Exception as exc:
-                err = str(exc)
-                if "Insufficient credits" in err or "credits" in err.lower():
-                    warning = "MillionVerifier has no credits — add credits at app.millionverifier.com"
-                    db.table("contacts").update({"status": "new"}).eq("id", contact.id).execute()
-                    return contact.model_copy(update={"status": "new"}), warning
-                raise
-            if contact.status != "verified":
-                return contact, warning
+            return contact.model_copy(update={"status": "verified", "mv_result": "skipped"}), warning
 
-        # skip enrichment + generation if a draft already exists
-        existing_draft = db.table("outreach_emails").select("id").eq("contact_id", contact.id).eq("status", "draft").limit(1).execute()
+        db.table("contacts").update({"status": "verifying"}).eq("id", contact.id).execute()
+        try:
+            contact = verify_module.verify_contact(contact.model_copy(update={"status": "verifying"}))
+        except Exception as exc:
+            err = str(exc)
+            if "Insufficient credits" in err or "credits" in err.lower():
+                warning = "MillionVerifier has no credits — add credits at app.millionverifier.com"
+                db.table("contacts").update({"status": "new"}).eq("id", contact.id).execute()
+                return contact.model_copy(update={"status": "new"}), warning
+            raise
+        return contact, warning
+    except Exception as exc:
+        log.error("Verify error for contact %s: %s", contact.id, exc)
+        return contact, warning
+
+
+def _generate_contact(contact: Contact, _skip: bool = False) -> tuple[Contact, str]:
+    db = get_db()
+    warning = ""
+    try:
+        existing_draft = (
+            db.table("outreach_emails").select("id")
+            .eq("contact_id", contact.id).eq("status", "draft").limit(1).execute()
+        )
         if existing_draft.data:
             db.table("contacts").update({"status": "drafted"}).eq("id", contact.id).execute()
             return contact.model_copy(update={"status": "drafted"}), warning
@@ -341,7 +367,6 @@ def _process_contact(contact: Contact, skip_verification: bool = False) -> tuple
         db.table("contacts").update({"status": "enriching"}).eq("id", contact.id).execute()
         website_text = ""
         if contact.company_website and not contact.bio:
-            # skip scraping when we already have bio context from the CSV
             website_text = enrich_module.scrape_company(contact.company_website)
             if website_text:
                 db.table("contact_enrichments").upsert(
@@ -362,7 +387,7 @@ def _process_contact(contact: Contact, skip_verification: bool = False) -> tuple
 
         return contact.model_copy(update={"status": "generating"}), warning
     except Exception as exc:
-        log.error("Prep error for contact %s: %s", contact.id, exc)
+        log.error("Generate error for contact %s: %s", contact.id, exc)
         return contact, warning
 
 
