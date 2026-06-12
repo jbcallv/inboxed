@@ -332,6 +332,12 @@ def _process_contact(contact: Contact, skip_verification: bool = False) -> tuple
             if contact.status != "verified":
                 return contact, warning
 
+        # skip enrichment + generation if a draft already exists
+        existing_draft = db.table("outreach_emails").select("id").eq("contact_id", contact.id).eq("status", "draft").limit(1).execute()
+        if existing_draft.data:
+            db.table("contacts").update({"status": "drafted"}).eq("id", contact.id).execute()
+            return contact.model_copy(update={"status": "drafted"}), warning
+
         db.table("contacts").update({"status": "enriching"}).eq("id", contact.id).execute()
         website_text = ""
         if contact.company_website and not contact.bio:
