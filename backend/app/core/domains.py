@@ -51,13 +51,28 @@ def record_complaint(domain_id: str) -> None:
 
 
 def check_and_pause_domains() -> None:
-    """Auto-pause any domain exceeding rolling 3-day bounce or complaint rates."""
+    """Auto-pause any domain exceeding rolling 3-day bounce or complaint rates.
+    Also pauses the campaign if all its domains are now paused."""
     db = get_db()
-    domains_result = db.table("sending_domains").select("id,domain,status").execute()
+    domains_result = db.table("sending_domains").select("id,domain,status,campaign_id").execute()
     for row in domains_result.data:
         if row["status"] == "paused":
             continue
         _check_domain_rates(db, row["id"])
+
+    # Re-fetch to see updated statuses, then pause campaigns with no active domains
+    domains_result = db.table("sending_domains").select("id,status,campaign_id").execute()
+    from itertools import groupby
+    by_campaign: dict[str, list] = {}
+    for row in domains_result.data:
+        cid = row.get("campaign_id")
+        if cid:
+            by_campaign.setdefault(cid, []).append(row["status"])
+    for campaign_id, statuses in by_campaign.items():
+        if all(s == "paused" for s in statuses):
+            db.table("campaigns").update({"status": "paused"}).eq(
+                "id", campaign_id
+            ).eq("status", "sending").execute()
 
 
 def _check_domain_rates(db, domain_id: str) -> None:
