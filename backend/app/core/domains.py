@@ -85,7 +85,7 @@ def _check_domain_rates(db, domain_id: str) -> None:
         return
 
     total_sent = sum(r["sent_count"] for r in rows)
-    if total_sent == 0:
+    if total_sent < settings.min_sends_before_pause:
         return
 
     bounce_rate = sum(r["bounce_count"] for r in rows) / total_sent

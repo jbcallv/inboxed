@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     warmup_steady_cap: int = 250
     max_bounce_rate: float = 0.03
     max_complaint_rate: float = 0.0005
+    min_sends_before_pause: int = 100
 
     prep_workers: int = 50  # parallel contacts during prep pipeline
 
