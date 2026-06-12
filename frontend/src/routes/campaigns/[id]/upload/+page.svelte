@@ -89,6 +89,6 @@
 				</button>
 			</div>
 		{/if}
-		<StepNav campaignId={id} next={{ href: `/campaigns/${id}/verify`, label: 'Verify + generate' }} />
+		<StepNav campaignId={id} next={{ href: `/campaigns/${id}/verify`, label: 'Verify emails' }} />
 	</Card>
 </div>
