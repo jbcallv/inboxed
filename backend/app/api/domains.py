@@ -65,6 +65,20 @@ def add_domain(body: DomainCreate, user: dict = Depends(get_current_user)):
     return result.data[0]
 
 
+@router.post("/{domain_id}/pause")
+def pause_domain(domain_id: str, user: dict = Depends(get_current_user)):
+    db = get_db()
+    db.table("sending_domains").update({"status": "paused"}).eq("id", domain_id).execute()
+    return {"status": "paused"}
+
+
+@router.post("/{domain_id}/resume")
+def resume_domain(domain_id: str, user: dict = Depends(get_current_user)):
+    db = get_db()
+    db.table("sending_domains").update({"status": "warming"}).eq("id", domain_id).execute()
+    return {"status": "warming"}
+
+
 @router.post("/suggest")
 def suggest_domains(body: SuggestRequest, user: dict = Depends(get_current_user)):
     suggestions = suggest_sending_domains(body.base_name)

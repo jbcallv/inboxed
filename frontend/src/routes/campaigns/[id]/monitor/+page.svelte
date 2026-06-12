@@ -92,7 +92,7 @@
 	<h3 class="text-xs font-medium text-neutral-400 uppercase tracking-widest mb-3">Domain pool</h3>
 	<div class="space-y-3">
 		{#each domains as domain}
-			<DomainCard {domain} />
+			<DomainCard {domain} onStatusChange={refresh} />
 		{/each}
 		{#if domains.length === 0}
 			<p class="text-sm text-neutral-400">No domains configured.</p>

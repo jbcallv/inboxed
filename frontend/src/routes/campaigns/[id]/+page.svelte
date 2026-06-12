@@ -107,7 +107,7 @@
 			{:else}
 				<div class="space-y-3">
 					{#each domains as domain}
-						<DomainCard {domain} />
+						<DomainCard {domain} onStatusChange={refresh} />
 					{/each}
 				</div>
 			{/if}
