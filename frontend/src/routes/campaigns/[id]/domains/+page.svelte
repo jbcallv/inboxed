@@ -135,6 +135,6 @@
 	<StepNav
 		campaignId={id}
 		prev={{ href: `/campaigns/${id}/sample`, label: '← Review sample' }}
-		next={{ href: `/campaigns/${id}/monitor`, label: 'Launch & monitor →', disabled: !hasDomains }}
+		next={{ href: `/campaigns/${id}/monitor`, label: 'Launch & monitor', disabled: !hasDomains }}
 	/>
 </div>

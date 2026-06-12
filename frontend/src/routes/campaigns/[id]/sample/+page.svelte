@@ -54,7 +54,7 @@
 		<StepNav
 			campaignId={id}
 			prev={{ href: `/campaigns/${id}/generate`, label: '← Generate' }}
-			next={{ href: `/campaigns/${id}/domains`, label: 'Configure domains →' }}
+			next={{ href: `/campaigns/${id}/domains`, label: 'Configure domains' }}
 		/>
 	</Card>
 
