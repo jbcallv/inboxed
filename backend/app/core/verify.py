@@ -17,11 +17,14 @@ def verify_email(email: str) -> VerifyResult:
     )
     response.raise_for_status()
     data = response.json()
-    return VerifyResult(email=email, code=data.get("result", "unknown"))
+    credits = data.get("credits", -1)
+    if credits == 0:
+        raise RuntimeError("Insufficient credits — add credits at app.millionverifier.com")
+    return VerifyResult(email=email, code=data.get("quality", data.get("result", "unknown")))
 
 
 def is_deliverable(result: VerifyResult) -> bool:
-    return result.code == "ok"
+    return result.code == "good"
 
 
 def verify_contact(contact: Contact) -> Contact:
