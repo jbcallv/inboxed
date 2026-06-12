@@ -21,7 +21,7 @@ def verify_email(email: str) -> VerifyResult:
 
 
 def is_deliverable(result: VerifyResult) -> bool:
-    return result.code in ("ok", "catch_all")
+    return result.code == "ok"
 
 
 def verify_contact(contact: Contact) -> Contact:
