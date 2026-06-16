@@ -98,7 +98,7 @@ async def verify_campaign(
     user: dict = Depends(get_current_user),
 ):
     _assert_owns(campaign_id, user)
-    get_db().table("campaigns").update({"status": "verifying"}).eq("id", campaign_id).execute()
+    get_db().table("campaigns").update({"status": "prepping"}).eq("id", campaign_id).execute()
     return StreamingResponse(
         _stream_workers(campaign_id, _VERIFY_STATUSES, _verify_contact, skip_verification, limit, "verified"),
         media_type="text/event-stream",
@@ -112,7 +112,7 @@ async def generate_campaign(
     user: dict = Depends(get_current_user),
 ):
     _assert_owns(campaign_id, user)
-    get_db().table("campaigns").update({"status": "generating"}).eq("id", campaign_id).execute()
+    get_db().table("campaigns").update({"status": "prepping"}).eq("id", campaign_id).execute()
     return StreamingResponse(
         _stream_workers(campaign_id, _GENERATE_STATUSES, _generate_contact, False, limit, "ready"),
         media_type="text/event-stream",
@@ -188,26 +188,48 @@ def get_sample(campaign_id: str, n: int = 5, user: dict = Depends(get_current_us
     import random
     _assert_owns(campaign_id, user)
     db = get_db()
-    contacts = db.table("contacts").select("id,first_name,last_name,company_name,email").eq("campaign_id", campaign_id).execute().data
-    contact_ids = [c["id"] for c in contacts]
-    contacts_map = {c["id"]: c for c in contacts}
+    # Paginate drafted contact IDs to avoid 1k cap
+    drafted_ids = []
+    offset = 0
+    while True:
+        batch = (
+            db.table("contacts")
+            .select("id")
+            .eq("campaign_id", campaign_id)
+            .eq("status", "drafted")
+            .range(offset, offset + 999)
+            .execute()
+            .data
+        )
+        drafted_ids.extend(r["id"] for r in batch)
+        if len(batch) < 1000:
+            break
+        offset += 1000
 
-    if not contact_ids:
+    if not drafted_ids:
         return []
 
-    # Fetch a larger pool then randomly pick n to avoid always showing the first rows
     pool_size = max(n * 5, 50)
-    pool = (
+    sample_ids = random.sample(drafted_ids, min(pool_size, len(drafted_ids)))
+    contacts_map = {
+        c["id"]: c
+        for c in db.table("contacts")
+        .select("id,first_name,last_name,company_name,email")
+        .in_("id", sample_ids)
+        .execute()
+        .data
+    }
+    drafts = (
         db.table("outreach_emails")
         .select("id,subject,body,contact_id")
         .eq("status", "draft")
-        .in_("contact_id", contact_ids)
+        .in_("contact_id", sample_ids)
         .limit(pool_size)
         .execute()
         .data
     )
-    emails = random.sample(pool, min(n, len(pool)))
-    return [{**e, "contact": contacts_map.get(e["contact_id"], {})} for e in emails]
+    sample = random.sample(drafts, min(n, len(drafts)))
+    return [{**e, "contact": contacts_map.get(e["contact_id"], {})} for e in sample]
 
 
 @router.post("/{campaign_id}/launch")

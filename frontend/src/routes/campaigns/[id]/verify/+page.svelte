@@ -140,7 +140,7 @@
 		<StepNav
 			campaignId={id}
 			prev={{ href: `/campaigns/${id}/upload`, label: '← Upload' }}
-			next={{ href: `/campaigns/${id}/generate`, label: 'Generate emails', disabled: !finished }}
+			next={{ href: `/campaigns/${id}/generate`, label: 'Generate emails' }}
 		/>
 	</Card>
 </div>
