@@ -24,10 +24,18 @@
 		bounced: 'bg-red-50 text-red-700',
 	};
 
+	const SORT_OPTIONS = [
+		{ value: 'newest', label: 'Newest first' },
+		{ value: 'oldest', label: 'Oldest first' },
+		{ value: 'company', label: 'Company A–Z' },
+		{ value: 'name', label: 'Name A–Z' },
+	];
+
 	let emails = $state<any[]>([]);
 	let loading = $state(false);
 	let selectedStatus = $state<string | null>(null);
 	let search = $state('');
+	let sort = $state('newest');
 	let page_num = $state(1);
 	let total = $state(0);
 	let expanded = $state<string | null>(null);
@@ -38,7 +46,7 @@
 
 	async function load() {
 		loading = true;
-		const params = new URLSearchParams({ page: String(page_num), limit: String(limit) });
+		const params = new URLSearchParams({ page: String(page_num), limit: String(limit), sort });
 		if (selectedStatus) params.set('status', selectedStatus);
 		if (search.trim()) params.set('search', search.trim());
 
@@ -100,12 +108,23 @@
 					</button>
 				{/each}
 			</div>
-			<input
-				bind:value={search}
-				oninput={onSearch}
-				placeholder="Search by email…"
-				class="ml-auto border border-neutral-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-neutral-400 w-56"
-			/>
+			<div class="ml-auto flex gap-2">
+				<select
+					bind:value={sort}
+					onchange={() => { page_num = 1; load(); }}
+					class="border border-neutral-200 rounded-lg px-3 py-1.5 text-sm text-neutral-600 focus:outline-none focus:ring-1 focus:ring-neutral-400 bg-white"
+				>
+					{#each SORT_OPTIONS as opt}
+						<option value={opt.value}>{opt.label}</option>
+					{/each}
+				</select>
+				<input
+					bind:value={search}
+					oninput={onSearch}
+					placeholder="Search by email…"
+					class="border border-neutral-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-neutral-400 w-56"
+				/>
+			</div>
 		</div>
 
 		<!-- Table -->

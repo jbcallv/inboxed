@@ -13,11 +13,18 @@
 	let loading = $state(true);
 	let sampleSize = $state(5);
 
+	let error = $state('');
 	const hasEmails = $derived(emails.length > 0);
 
 	async function loadSample() {
 		loading = true;
-		emails = await get(`/api/campaigns/${id}/sample?n=${sampleSize}`).catch(() => []);
+		error = '';
+		try {
+			emails = await get(`/api/campaigns/${id}/sample?n=${sampleSize}`);
+		} catch (e: any) {
+			error = e.message ?? 'Failed to load sample';
+			emails = [];
+		}
 		loading = false;
 	}
 
@@ -28,7 +35,9 @@
 	<Card class="mb-6">
 		<StepHeader step={4} title="Review sample" description="A random sample of generated emails. Browse before configuring domains and launching." />
 
-		{#if !loading && !hasEmails}
+		{#if error}
+			<div class="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 mb-4">{error}</div>
+		{:else if !loading && !hasEmails}
 			<div class="p-3 bg-neutral-50 border border-neutral-200 rounded-lg text-sm text-neutral-600 mb-4">
 				No emails generated yet. Return to step 3 to generate.
 			</div>

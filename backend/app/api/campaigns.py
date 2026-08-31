@@ -146,17 +146,24 @@ def list_emails(
     search: str | None = None,
     page: int = 1,
     limit: int = 50,
+    sort: str = "newest",
     user: dict = Depends(get_current_user),
 ):
     _assert_owns(campaign_id, user)
     db = get_db()
     statuses = [status] if status else _SENT_STATUSES
+    sort_col, sort_desc = {
+        "newest": ("created_at", True),
+        "oldest": ("created_at", False),
+        "company": ("company_name", False),
+        "name": ("last_name", False),
+    }.get(sort, ("created_at", True))
     q = (
         db.table("contacts")
         .select("id,first_name,last_name,company_name,email,status,outreach_emails(subject,body,status),responses(sentiment,is_hot_lead,reply_body,received_at)")
         .eq("campaign_id", campaign_id)
         .in_("status", statuses)
-        .order("id")
+        .order(sort_col, desc=sort_desc)
         .range((page - 1) * limit, page * limit - 1)
     )
     if search:

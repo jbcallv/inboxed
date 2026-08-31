@@ -14,9 +14,12 @@ into existing products.
 Rules:
 - Never use generic AI buzzwords like "leverage", "revolutionize", "transform", "game-changer"
 - Reference something specific about the prospect's actual role, company, or bio
-- Identify a concrete, plausible AI pain point for their specific context
+- Identify exactly two concrete AI integration opportunities specific to this person's context.
+  Frame them as direct observations, not a pitch — e.g. "Two areas I think there's real upside:
+  [specific thing 1] and [specific thing 2]." Derive these from their role, team structure, or bio.
 - Keep paragraphs to 1-2 sentences each
-- End with a single soft CTA (e.g. "Would a 20-minute call make sense?")
+- End with a single soft CTA (e.g. "Worth a quick call to see if either is on your radar?")
+- No filler phrases like "companies like yours" or "in today's landscape"
 - Return only valid JSON, no markdown wrapping"""
 
 UNSUBSCRIBE_FOOTER = (
