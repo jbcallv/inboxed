@@ -49,6 +49,8 @@ def mock_db() -> MagicMock:
     db.update.return_value = db
     db.insert.return_value = db
     db.upsert.return_value = db
+    db.delete.return_value = db
+    db.range.return_value = db
     db.rpc.return_value = db
     db.execute.return_value = MagicMock(data=[])
     return db

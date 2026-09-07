@@ -13,8 +13,13 @@ def _get_client() -> anthropic.Anthropic:
     return _client
 
 
-def generate_email(contact: Contact, website_text: str, narrative_bio: str = "") -> Draft | None:
-    """Calls Claude with the proven prompt. Returns Draft or None on parse failure."""
+def generate_email(
+    contact: Contact,
+    website_text: str,
+    narrative_bio: str = "",
+    system_prompt: str = "",
+) -> Draft | None:
+    """Calls Claude with the campaign prompt. Returns Draft or None on parse failure."""
     user_message = _build_user_message(contact, website_text, narrative_bio)
     client = _get_client()
 
@@ -24,7 +29,7 @@ def generate_email(contact: Contact, website_text: str, narrative_bio: str = "")
         system=[
             {
                 "type": "text",
-                "text": settings.generation_system_prompt,
+                "text": system_prompt or settings.generation_system_prompt,
                 "cache_control": {"type": "ephemeral"},
             }
         ],
@@ -33,6 +38,12 @@ def generate_email(contact: Contact, website_text: str, narrative_bio: str = "")
 
     raw = message.content[0].text.strip()
     return _parse_draft(raw)
+
+
+def build_full_prompt(contact: Contact, system_prompt: str, narrative_bio: str = "") -> str:
+    system = system_prompt or settings.generation_system_prompt
+    user_message = _build_user_message(contact, "", narrative_bio)
+    return f"SYSTEM PROMPT\n{system}\n\nUSER MESSAGE\n{user_message}"
 
 
 def _build_user_message(contact: Contact, website_text: str, narrative_bio: str = "") -> str:
@@ -49,10 +60,16 @@ def _build_user_message(contact: Contact, website_text: str, narrative_bio: str 
         parts.append(f"Bio: {contact.bio}")
     if website_text:
         parts.append(f"\nWebsite excerpt:\n{website_text[:2000]}")
+
+    greeting_name = contact.first_name or "there"
     parts.append(
-        '\nReturn JSON only: {"subject": "under 8 words, personalized", '
-        '"body": "3 short paragraphs under 150 words"}'
+        f'\nReturn JSON only, no markdown. Schema: '
+        f'{{"subject": "under 8 words, specific to this company", '
+        f'"body": "under 150 words. Start with the greeting \'Hi {greeting_name},\' '
+        f'followed by a blank line, then the email. No signature, no sign-off, '
+        f'no unsubscribe or footer text after the body."}}'
     )
+
     return "\n".join(parts)
 
 

@@ -1,7 +1,9 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { getToken } from '$lib/supabase';
+	import { get, put } from '$lib/api';
 	import Card from '$lib/components/Card.svelte';
 	import StepHeader from '$lib/components/StepHeader.svelte';
 	import ProgressLine from '$lib/components/ProgressLine.svelte';
@@ -10,6 +12,39 @@
 
 	const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 	const id = $derived($page.params.id);
+
+	let prompt = $state('');
+	let defaultPrompt = $state('');
+	let preview = $state('');
+	let sampleName = $state('');
+	let promptSaved = $state(false);
+	let promptError = $state('');
+
+	async function loadPrompt() {
+		const data = await get(`/api/campaigns/${id}/prompt`);
+		prompt = data.prompt;
+		defaultPrompt = data.default_prompt;
+		preview = data.preview;
+		sampleName = data.sample_contact?.name || 'sample contact';
+	}
+
+	async function savePrompt() {
+		promptError = '';
+		try {
+			await put(`/api/campaigns/${id}/prompt`, { prompt });
+			await loadPrompt();
+			promptSaved = true;
+			setTimeout(() => (promptSaved = false), 2000);
+		} catch (e: any) {
+			promptError = e.message;
+		}
+	}
+
+	function resetPrompt() {
+		prompt = defaultPrompt;
+	}
+
+	onMount(loadPrompt);
 
 	let running = $state(false);
 	let done = $state(0);
@@ -73,6 +108,49 @@
 			title="Generate emails"
 			description="Enriches verified contacts and generates personalized cold emails via Claude."
 		/>
+
+		{#if !running && !finished}
+			<div class="mb-6 border border-neutral-200 rounded-lg p-4 bg-neutral-50">
+				<p class="text-xs font-medium text-neutral-400 uppercase tracking-widest mb-2">
+					Generation prompt
+				</p>
+				<p class="text-xs text-neutral-500 mb-3">
+					This system prompt is sent to Claude for every contact in this campaign. Edit it to
+					change tone and focus.
+				</p>
+				<textarea
+					bind:value={prompt}
+					rows="12"
+					class="w-full font-mono text-xs leading-relaxed border border-neutral-200 rounded-lg p-3 bg-white text-neutral-800"
+				></textarea>
+				<div class="mt-2 flex items-center gap-3">
+					<button
+						onclick={savePrompt}
+						class="px-4 py-1.5 bg-neutral-900 text-white rounded-lg text-xs font-medium"
+					>
+						Save prompt
+					</button>
+					<button
+						onclick={resetPrompt}
+						class="px-4 py-1.5 border border-neutral-200 text-neutral-600 rounded-lg text-xs"
+					>
+						Reset to default
+					</button>
+					{#if promptSaved}<span class="text-xs text-green-700">Saved</span>{/if}
+					{#if promptError}<span class="text-xs text-red-500">{promptError}</span>{/if}
+				</div>
+
+				<p class="text-xs font-medium text-neutral-400 uppercase tracking-widest mt-5 mb-2">
+					Full prompt preview — {sampleName}
+				</p>
+				<p class="text-xs text-neutral-500 mb-2">
+					Exactly what gets sent, with this contact's variables filled in. During generation the
+					bio is first rewritten into a short narrative by a summarizer.
+				</p>
+				<pre
+					class="max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-relaxed border border-neutral-200 rounded-lg p-3 bg-white text-neutral-700">{preview}</pre>
+			</div>
+		{/if}
 
 		{#if !running && !finished}
 			<div class="mb-5 flex items-center justify-between">

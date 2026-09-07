@@ -1,12 +1,14 @@
 import asyncio
 import json
 import logging
+from functools import partial
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from ..db import get_db
 from ..config import settings
+from ..prompts import DEFAULT_GENERATION_PROMPT
 from ..core.ingest import parse_upload
 from ..core.models import Contact
 from ..core import (
@@ -24,6 +26,10 @@ log = logging.getLogger(__name__)
 
 class CampaignCreate(BaseModel):
     name: str
+
+
+class PromptUpdate(BaseModel):
+    prompt: str
 
 
 @router.get("")
@@ -113,10 +119,57 @@ async def generate_campaign(
 ):
     _assert_owns(campaign_id, user)
     get_db().table("campaigns").update({"status": "prepping"}).eq("id", campaign_id).execute()
+    system_prompt = _resolve_prompt(campaign_id)
+    worker = partial(_generate_contact, system_prompt=system_prompt)
     return StreamingResponse(
-        _stream_workers(campaign_id, _GENERATE_STATUSES, _generate_contact, False, limit, "ready"),
+        _stream_workers(campaign_id, _GENERATE_STATUSES, worker, False, limit, "ready"),
         media_type="text/event-stream",
     )
+
+
+@router.post("/{campaign_id}/generate/reset")
+def reset_generation(campaign_id: str, user: dict = Depends(get_current_user)):
+    """Clears drafted emails so the campaign can be regenerated with a new prompt."""
+    _assert_owns(campaign_id, user)
+    db = get_db()
+    cleared = _delete_draft_emails(db, campaign_id)
+    for status in _GENERATED_STATUSES:
+        _bulk_status_update(db, campaign_id, from_status=status, to_status="verified")
+    db.table("campaigns").update({"status": "verified"}).eq("id", campaign_id).execute()
+    return {"cleared_emails": cleared}
+
+
+@router.get("/{campaign_id}/prompt")
+def get_generation_prompt(campaign_id: str, user: dict = Depends(get_current_user)):
+    _assert_owns(campaign_id, user)
+    stored = _stored_prompt(campaign_id)
+    prompt = stored or DEFAULT_GENERATION_PROMPT
+    sample = _sample_contact(campaign_id)
+    return {
+        "prompt": prompt,
+        "is_custom": bool(stored),
+        "default_prompt": DEFAULT_GENERATION_PROMPT,
+        "preview": generate_module.build_full_prompt(sample, prompt),
+        "sample_contact": {
+            "name": f"{sample.first_name or ''} {sample.last_name or ''}".strip(),
+            "position": sample.position,
+            "company_name": sample.company_name,
+            "bio": sample.bio,
+        },
+    }
+
+
+@router.put("/{campaign_id}/prompt")
+def set_generation_prompt(
+    campaign_id: str,
+    body: PromptUpdate,
+    user: dict = Depends(get_current_user),
+):
+    _assert_owns(campaign_id, user)
+    get_db().table("campaigns").update(
+        {"generation_prompt": body.prompt.strip() or None}
+    ).eq("id", campaign_id).execute()
+    return {"status": "saved"}
 
 
 @router.get("/{campaign_id}/contacts")
@@ -266,6 +319,41 @@ def resume_campaign(campaign_id: str, user: dict = Depends(get_current_user)):
 
 _VERIFY_STATUSES = ["new", "finding", "verifying"]
 _GENERATE_STATUSES = ["verified", "enriching", "enriched", "generating"]
+_GENERATED_STATUSES = ["drafted", "generating", "enriched", "enriching"]
+
+
+def _delete_draft_emails(db, campaign_id: str) -> int:
+    """Removes every draft outreach email for the campaign, paginating past the 1,000-row cap."""
+    PAGE = 1000
+    deleted = 0
+    offset = 0
+    while True:
+        contact_ids = [
+            row["id"]
+            for row in (
+                db.table("contacts")
+                .select("id")
+                .eq("campaign_id", campaign_id)
+                .order("id")
+                .range(offset, offset + PAGE - 1)
+                .execute()
+                .data
+            )
+        ]
+        if not contact_ids:
+            break
+        result = (
+            db.table("outreach_emails")
+            .delete()
+            .in_("contact_id", contact_ids)
+            .eq("status", "draft")
+            .execute()
+        )
+        deleted += len(result.data or [])
+        if len(contact_ids) < PAGE:
+            break
+        offset += PAGE
+    return deleted
 
 
 def _fetch_contacts(campaign_id: str, statuses: list[str], limit: int | None = None) -> list[dict]:
@@ -381,7 +469,52 @@ def _verify_contact(contact: Contact, skip_verification: bool = False) -> tuple[
         return contact, warning
 
 
-def _generate_contact(contact: Contact, _skip: bool = False) -> tuple[Contact, str]:
+def _stored_prompt(campaign_id: str) -> str:
+    row = (
+        get_db()
+        .table("campaigns")
+        .select("generation_prompt")
+        .eq("id", campaign_id)
+        .single()
+        .execute()
+        .data
+    )
+    return (row or {}).get("generation_prompt") or ""
+
+
+def _resolve_prompt(campaign_id: str) -> str:
+    return _stored_prompt(campaign_id) or DEFAULT_GENERATION_PROMPT
+
+
+def _sample_contact(campaign_id: str) -> Contact:
+    rows = (
+        get_db()
+        .table("contacts")
+        .select("*")
+        .eq("campaign_id", campaign_id)
+        .order("id")
+        .limit(1)
+        .execute()
+        .data
+    )
+    if rows:
+        return Contact(**rows[0])
+    return Contact(
+        id=0,
+        campaign_id=campaign_id,
+        first_name="Jordan",
+        last_name="Rivera",
+        company_name="Northwind Analytics",
+        company_website="https://northwind.example",
+        position="VP of Operations",
+        bio="Leads a 12-person ops team, spends most of the week reconciling spreadsheets by hand.",
+        status="new",
+    )
+
+
+def _generate_contact(
+    contact: Contact, _skip: bool = False, system_prompt: str = ""
+) -> tuple[Contact, str]:
     db = get_db()
     warning = ""
     try:
@@ -406,7 +539,7 @@ def _generate_contact(contact: Contact, _skip: bool = False) -> tuple[Contact, s
 
         db.table("contacts").update({"status": "generating"}).eq("id", contact.id).execute()
         narrative_bio = bio_enrich_module.build_narrative_bio(contact)
-        draft = generate_module.generate_email(contact, website_text, narrative_bio)
+        draft = generate_module.generate_email(contact, website_text, narrative_bio, system_prompt)
         if draft:
             db.table("outreach_emails").insert(
                 {"contact_id": contact.id, "subject": draft.subject, "body": draft.body, "status": "draft"}

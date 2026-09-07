@@ -5,7 +5,7 @@ vi.mock('./supabase', () => ({ getToken: vi.fn().mockResolvedValue('test-jwt') }
 // Mock import.meta.env
 vi.stubEnv('VITE_API_URL', 'http://localhost:8000');
 
-const { get, post, postForm } = await import('./api');
+const { get, post, put, postForm } = await import('./api');
 
 describe('get', () => {
 	beforeEach(() => vi.stubGlobal('fetch', vi.fn()));
@@ -53,6 +53,27 @@ describe('post', () => {
 	it('throws on non-ok response', async () => {
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }));
 		await expect(post('/api/campaigns/bad')).rejects.toThrow('POST /api/campaigns/bad → 404');
+	});
+});
+
+describe('put', () => {
+	it('sends PUT with JSON body, content-type and auth header', async () => {
+		const mockFetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: 'saved' }) });
+		vi.stubGlobal('fetch', mockFetch);
+
+		await put('/api/campaigns/abc/prompt', { prompt: 'hello' });
+
+		const [url, opts] = mockFetch.mock.calls[0];
+		expect(url).toBe('http://localhost:8000/api/campaigns/abc/prompt');
+		expect(opts.method).toBe('PUT');
+		expect((opts.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+		expect((opts.headers as Record<string, string>).Authorization).toBe('Bearer test-jwt');
+		expect(JSON.parse(opts.body)).toEqual({ prompt: 'hello' });
+	});
+
+	it('throws on non-ok response', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+		await expect(put('/api/campaigns/bad/prompt')).rejects.toThrow('PUT /api/campaigns/bad/prompt → 500');
 	});
 });
 

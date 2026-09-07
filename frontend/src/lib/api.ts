@@ -23,6 +23,16 @@ export async function post(path: string, body?: unknown) {
 	return res.json();
 }
 
+export async function put(path: string, body?: unknown) {
+	const res = await fetch(`${BASE}${path}`, {
+		method: 'PUT',
+		headers: { ...(await headers()), 'Content-Type': 'application/json' },
+		body: body !== undefined ? JSON.stringify(body) : undefined
+	});
+	if (!res.ok) throw new Error(`PUT ${path} → ${res.status}`);
+	return res.json();
+}
+
 export async function postForm(path: string, form: FormData) {
 	const res = await fetch(`${BASE}${path}`, {
 		method: 'POST',
