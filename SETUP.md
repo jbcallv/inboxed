@@ -69,6 +69,20 @@ Replies return to a Zoho mailbox (your domain's MX points at Zoho). Resend inbou
 Get a Domainr API key (via RapidAPI) and set `DOMAINR_API_KEY`. If unset, the suggest
 feature is hidden; everything else works.
 
+## 7b. CAN-SPAM compliance (required before sending)
+
+Every commercial email must include a physical postal address and a working
+unsubscribe mechanism.
+
+1. Set a physical mailing address per campaign, on that campaign's settings page
+   (`/campaigns/[id]/settings`). Emails generated before an address is set still send,
+   but the generation step surfaces a warning until one is configured.
+2. Set `FRONTEND_URL` (e.g. `https://app.yourdomain.com`) so the unsubscribe link
+   embedded in each email points at the right place.
+3. Unsubscribing calls Resend's suppression list (`resend.Suppressions.add`), which
+   blocks all future sends to that address account-wide, in addition to the app's own
+   `suppressions` table used to filter contacts before they're claimed to send.
+
 ## 8. Deploy (Render or Railway)
 
 Two processes from this repo:

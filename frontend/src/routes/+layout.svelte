@@ -14,10 +14,11 @@
 
 	const onCampaignPage = $derived($page.url.pathname.startsWith('/campaigns'));
 	const onAuthPage = $derived($page.url.pathname === '/');
+	const onPublicPage = $derived($page.url.pathname === '/unsubscribe');
 </script>
 
 <div class="min-h-screen bg-neutral-50 font-sans">
-	{#if !onAuthPage}
+	{#if !onAuthPage && !onPublicPage}
 		<header class="border-b border-neutral-200 bg-white">
 			<div class="max-w-2xl mx-auto px-4 h-12 flex items-center gap-4">
 				<a href="/campaigns" class="text-sm font-semibold text-neutral-900 tracking-tight">Inboxed</a>

@@ -82,6 +82,13 @@
 			</div>
 		</div>
 
+		{#if !campaign.physical_address}
+			<div class="mb-6 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center justify-between gap-3">
+				<span>No physical address set — required by US law (CAN-SPAM) before sending.</span>
+				<a href="/campaigns/{id}/settings" class="underline underline-offset-2 whitespace-nowrap">Set it up</a>
+			</div>
+		{/if}
+
 		<!-- Stats -->
 		<Card class="mb-4">
 			<p class="text-xs font-medium text-neutral-400 uppercase tracking-widest mb-4">Contact pipeline</p>
@@ -148,6 +155,10 @@
 			<a href="/campaigns/{id}/emails"
 				class="block border border-neutral-200 rounded-lg px-4 py-3 text-sm text-neutral-700 hover:border-neutral-300 hover:bg-white transition-colors bg-neutral-50">
 				View sent emails & replies
+			</a>
+			<a href="/campaigns/{id}/settings"
+				class="block border border-neutral-200 rounded-lg px-4 py-3 text-sm text-neutral-700 hover:border-neutral-300 hover:bg-white transition-colors bg-neutral-50">
+				Compliance settings
 			</a>
 		</div>
 	{:else}

@@ -51,6 +51,22 @@ before moving on (testing is required, iterative — not at the end). Check item
 ## Phase 9 — Docs
 - [x] README quickstart; SETUP.md + .env.example already current
 
+## Phase 10 — CAN-SPAM compliance (physical address + unsubscribe)
+- [x] Migration `006_unsubscribe_compliance.sql`: `campaigns.physical_address`;
+      `claim_queued_contacts` excludes suppressed emails
+- [x] Bump `resend` to 2.46.0 for `Suppressions` API support
+- [x] `core/suppress.suppress()` calls `resend.Suppressions.add` alongside local table
+- [x] `utils/unsubscribe.py` builds the unsubscribe URL + footer (address + link)
+- [x] `_generate_contact` appends the footer to every drafted email; surfaces a
+      generation-time warning when no address is set yet
+- [x] `PUT /campaigns/{id}/settings` to save the per-campaign physical address
+- [x] `POST /api/unsubscribe` (no auth) — validates contact, suppresses, marks
+      contact `unsubscribed`
+- [x] Frontend `/unsubscribe` public page (confirm → success/error states)
+- [x] Frontend `/campaigns/[id]/settings` page + link tile + banner when unset
+- [x] Tests: `test_unsubscribe.py`, `test_suppress.py`, `test_campaign_settings.py`
+      (backend); `unsubscribe/page.test.ts` (frontend, 3 flows)
+
 ---
 
 ## Review

@@ -1,6 +1,6 @@
 import json
 import anthropic
-from ..config import settings, UNSUBSCRIBE_FOOTER
+from ..config import settings
 from .models import Contact, Draft
 
 _client: anthropic.Anthropic | None = None
@@ -77,7 +77,7 @@ def _parse_draft(raw: str) -> Draft | None:
     try:
         data = json.loads(_strip_code_fence(raw))
         subject = data.get("subject", "").strip()
-        body = data.get("body", "").strip() + UNSUBSCRIBE_FOOTER
+        body = data.get("body", "").strip()
         if subject and body:
             return Draft(subject=subject, body=body)
     except (json.JSONDecodeError, AttributeError):

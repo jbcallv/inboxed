@@ -4,13 +4,10 @@ from typing import Optional
 
 from .prompts import DEFAULT_GENERATION_PROMPT
 
-UNSUBSCRIBE_FOOTER = (
-    "\n\n---\nIf you'd prefer not to hear from us, "
-    "simply reply with \"unsubscribe\" and we'll remove you immediately."
-)
-
 
 class Settings(BaseSettings):
+    frontend_url: str = "http://localhost:5173"
+
     supabase_url: str = ""
     supabase_service_key: str = ""
     supabase_anon_key: str = ""

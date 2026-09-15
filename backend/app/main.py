@@ -2,7 +2,7 @@ import logging
 import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .api import campaigns, contacts, domains, stats, webhooks
+from .api import campaigns, contacts, domains, stats, unsubscribe, webhooks
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stdout)
 
@@ -20,6 +20,7 @@ app.include_router(campaigns.router, prefix="/api")
 app.include_router(contacts.router, prefix="/api")
 app.include_router(domains.router, prefix="/api")
 app.include_router(stats.router, prefix="/api")
+app.include_router(unsubscribe.router, prefix="/api")
 app.include_router(webhooks.router, prefix="/api")
 
 

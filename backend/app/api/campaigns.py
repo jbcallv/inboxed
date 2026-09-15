@@ -11,6 +11,7 @@ from ..config import settings
 from ..prompts import DEFAULT_GENERATION_PROMPT
 from ..core.ingest import parse_upload
 from ..core.models import Contact
+from ..utils.unsubscribe import build_compliance_footer
 from ..core import (
     verify as verify_module,
     enrich as enrich_module,
@@ -30,6 +31,10 @@ class CampaignCreate(BaseModel):
 
 class PromptUpdate(BaseModel):
     prompt: str
+
+
+class CampaignSettingsUpdate(BaseModel):
+    physical_address: str
 
 
 @router.get("")
@@ -168,6 +173,19 @@ def set_generation_prompt(
     _assert_owns(campaign_id, user)
     get_db().table("campaigns").update(
         {"generation_prompt": body.prompt.strip() or None}
+    ).eq("id", campaign_id).execute()
+    return {"status": "saved"}
+
+
+@router.put("/{campaign_id}/settings")
+def set_campaign_settings(
+    campaign_id: str,
+    body: CampaignSettingsUpdate,
+    user: dict = Depends(get_current_user),
+):
+    _assert_owns(campaign_id, user)
+    get_db().table("campaigns").update(
+        {"physical_address": body.physical_address.strip() or None}
     ).eq("id", campaign_id).execute()
     return {"status": "saved"}
 
@@ -486,6 +504,19 @@ def _resolve_prompt(campaign_id: str) -> str:
     return _stored_prompt(campaign_id) or DEFAULT_GENERATION_PROMPT
 
 
+def _campaign_physical_address(campaign_id: str) -> str:
+    row = (
+        get_db()
+        .table("campaigns")
+        .select("physical_address")
+        .eq("id", campaign_id)
+        .single()
+        .execute()
+        .data
+    )
+    return (row or {}).get("physical_address") or ""
+
+
 def _sample_contact(campaign_id: str) -> Contact:
     rows = (
         get_db()
@@ -541,8 +572,15 @@ def _generate_contact(
         narrative_bio = bio_enrich_module.build_narrative_bio(contact)
         draft = generate_module.generate_email(contact, website_text, narrative_bio, system_prompt)
         if draft:
+            physical_address = _campaign_physical_address(contact.campaign_id)
+            if not physical_address:
+                warning = (
+                    "No physical address configured for this campaign — required by CAN-SPAM. "
+                    "Set one on the campaign settings page."
+                )
+            footer = build_compliance_footer(physical_address, contact.email or "", contact.campaign_id)
             db.table("outreach_emails").insert(
-                {"contact_id": contact.id, "subject": draft.subject, "body": draft.body, "status": "draft"}
+                {"contact_id": contact.id, "subject": draft.subject, "body": draft.body + footer, "status": "draft"}
             ).execute()
             db.table("contacts").update({"status": "drafted"}).eq("id", contact.id).execute()
             return contact.model_copy(update={"status": "drafted"}), warning

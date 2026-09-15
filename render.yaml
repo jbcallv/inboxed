@@ -30,6 +30,8 @@ services:
         sync: false
       - key: ZOHO_REPLY_TO
         sync: false
+      - key: FRONTEND_URL
+        sync: false
 
   - type: worker
     name: inboxed-worker
