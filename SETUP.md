@@ -89,9 +89,13 @@ Two processes from this repo:
 - **web:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 - **worker:** `python -m app.worker.runner` (always-on; the "while you sleep" part)
 
-Frontend: build the SvelteKit app as a static site (Render static / Vercel / Netlify).
-Set all env vars in the host's dashboard. Point the Resend webhook at the deployed
-web URL.
+Frontend: deployed on Netlify (`@sveltejs/adapter-netlify`, configured via
+`netlify.toml` at the repo root — base directory `frontend`, publish `frontend/build`).
+In the Netlify dashboard: connect this repo, set `VITE_SUPABASE_URL`,
+`VITE_SUPABASE_ANON_KEY`, and `VITE_API_URL` (the deployed backend's URL) as env vars.
+Once deployed, set `FRONTEND_URL` on the backend (Render) to the Netlify site's URL —
+this is what the unsubscribe link embedded in every email points at. Point the Resend
+webhook at the deployed backend URL.
 
 ---
 
