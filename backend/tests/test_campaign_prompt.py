@@ -1,9 +1,10 @@
 from unittest.mock import MagicMock, patch
 
 from app.api.campaigns import PromptUpdate, get_generation_prompt, set_generation_prompt
-from app.core import generate
 from app.config import settings
+from app.core import generate
 from app.prompts import DEFAULT_GENERATION_PROMPT
+
 from .conftest import make_contact, mock_db
 
 USER = {"sub": "user-uuid"}
@@ -31,6 +32,19 @@ class TestGenerateEmailPrompt:
             generate.generate_email(make_contact(), "", "", "")
         sent = client.messages.create.call_args.kwargs["system"][0]["text"]
         assert sent == settings.generation_system_prompt
+
+
+class TestFormatSubject:
+    def test_prefixes_with_both_company_names(self):
+        assert generate.format_subject("Inboxed", "Acme Corp", "Cut reporting time in half") == (
+            "Inboxed/Acme Corp - Cut reporting time in half"
+        )
+
+    def test_strips_whitespace(self):
+        assert generate.format_subject("  Inboxed  ", "  Acme  ", "  blurb  ") == "Inboxed/Acme - blurb"
+
+    def test_falls_back_when_names_blank(self):
+        assert generate.format_subject("", "", "blurb") == "Us/You - blurb"
 
 
 class TestBuildFullPrompt:

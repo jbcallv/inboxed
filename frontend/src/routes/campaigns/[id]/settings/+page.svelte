@@ -6,18 +6,23 @@
 
 	const id = $derived($page.params.id);
 	let address = $state('');
+	let senderCompanyName = $state('');
 	let saving = $state(false);
 	let saved = $state(false);
 
 	onMount(async () => {
 		const campaign = await get(`/api/campaigns/${id}`).catch(() => null);
 		address = campaign?.physical_address ?? '';
+		senderCompanyName = campaign?.sender_company_name ?? '';
 	});
 
 	async function save() {
 		saving = true;
 		saved = false;
-		await put(`/api/campaigns/${id}/settings`, { physical_address: address });
+		await put(`/api/campaigns/${id}/settings`, {
+			physical_address: address,
+			sender_company_name: senderCompanyName
+		});
 		saving = false;
 		saved = true;
 	}
@@ -34,6 +39,18 @@
 		</div>
 		<hr class="border-neutral-100 mb-6" />
 
+		<label class="block text-xs text-neutral-500 mb-1" for="sender-company-name">Your company name</label>
+		<p class="text-xs text-neutral-400 mb-2">
+			Used as the subject line prefix on every email: "{senderCompanyName || 'Your Company'}/{'{their company}'} - blurb".
+		</p>
+		<input
+			id="sender-company-name"
+			bind:value={senderCompanyName}
+			placeholder="Acme Inc"
+			class="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-neutral-400 mb-6"
+			oninput={() => (saved = false)}
+		/>
+
 		<label class="block text-xs text-neutral-500 mb-1" for="address">Physical mailing address</label>
 		<textarea
 			id="address"
@@ -44,7 +61,7 @@
 			oninput={() => (saved = false)}
 		></textarea>
 
-		<button onclick={save} disabled={saving || !address.trim()}
+		<button onclick={save} disabled={saving || !address.trim() || !senderCompanyName.trim()}
 			class="mt-4 px-4 py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium disabled:opacity-50">
 			{saving ? 'Saving…' : 'Save'}
 		</button>

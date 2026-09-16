@@ -2,23 +2,24 @@ import asyncio
 import json
 import logging
 from functools import partial
-from typing import Any
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from ..db import get_db
+
 from ..config import settings
-from ..prompts import DEFAULT_GENERATION_PROMPT
+from ..core import (
+    bio_enrich as bio_enrich_module,
+    enrich as enrich_module,
+    finder as finder_module,
+    generate as generate_module,
+    verify as verify_module,
+)
 from ..core.ingest import parse_upload
 from ..core.models import Contact
+from ..db import get_db
+from ..prompts import DEFAULT_GENERATION_PROMPT
 from ..utils.unsubscribe import build_compliance_footer
-from ..core import (
-    verify as verify_module,
-    enrich as enrich_module,
-    generate as generate_module,
-    finder as finder_module,
-    bio_enrich as bio_enrich_module,
-)
 from .auth import get_current_user
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
@@ -35,6 +36,7 @@ class PromptUpdate(BaseModel):
 
 class CampaignSettingsUpdate(BaseModel):
     physical_address: str
+    sender_company_name: str
 
 
 @router.get("")
@@ -185,7 +187,10 @@ def set_campaign_settings(
 ):
     _assert_owns(campaign_id, user)
     get_db().table("campaigns").update(
-        {"physical_address": body.physical_address.strip() or None}
+        {
+            "physical_address": body.physical_address.strip() or None,
+            "sender_company_name": body.sender_company_name.strip() or None,
+        }
     ).eq("id", campaign_id).execute()
     return {"status": "saved"}
 
@@ -504,17 +509,17 @@ def _resolve_prompt(campaign_id: str) -> str:
     return _stored_prompt(campaign_id) or DEFAULT_GENERATION_PROMPT
 
 
-def _campaign_physical_address(campaign_id: str) -> str:
+def _campaign_settings(campaign_id: str) -> dict:
     row = (
         get_db()
         .table("campaigns")
-        .select("physical_address")
+        .select("physical_address,sender_company_name")
         .eq("id", campaign_id)
         .single()
         .execute()
         .data
     )
-    return (row or {}).get("physical_address") or ""
+    return row or {}
 
 
 def _sample_contact(campaign_id: str) -> Contact:
@@ -572,15 +577,23 @@ def _generate_contact(
         narrative_bio = bio_enrich_module.build_narrative_bio(contact)
         draft = generate_module.generate_email(contact, website_text, narrative_bio, system_prompt)
         if draft:
-            physical_address = _campaign_physical_address(contact.campaign_id)
-            if not physical_address:
+            campaign_settings = _campaign_settings(contact.campaign_id)
+            physical_address = campaign_settings.get("physical_address") or ""
+            sender_company_name = campaign_settings.get("sender_company_name") or ""
+            missing = [
+                label
+                for label, value in [("physical address", physical_address), ("sender company name", sender_company_name)]
+                if not value
+            ]
+            if missing:
                 warning = (
-                    "No physical address configured for this campaign — required by CAN-SPAM. "
-                    "Set one on the campaign settings page."
+                    f"No {' or '.join(missing)} configured for this campaign — required for compliant, "
+                    f"correctly formatted emails. Set it on the campaign settings page."
                 )
+            subject = generate_module.format_subject(sender_company_name, contact.company_name or "", draft.subject)
             footer = build_compliance_footer(physical_address, contact.email or "", contact.campaign_id)
             db.table("outreach_emails").insert(
-                {"contact_id": contact.id, "subject": draft.subject, "body": draft.body + footer, "status": "draft"}
+                {"contact_id": contact.id, "subject": subject, "body": draft.body + footer, "status": "draft"}
             ).execute()
             db.table("contacts").update({"status": "drafted"}).eq("id", contact.id).execute()
             return contact.model_copy(update={"status": "drafted"}), warning

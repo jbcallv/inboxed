@@ -66,6 +66,11 @@ before moving on (testing is required, iterative — not at the end). Check item
 - [x] Frontend `/campaigns/[id]/settings` page + link tile + banner when unset
 - [x] Tests: `test_unsubscribe.py`, `test_suppress.py`, `test_campaign_settings.py`
       (backend); `unsubscribe/page.test.ts` (frontend, 3 flows)
+- [x] Subject line format: `{sender_company_name}/{their company} - blurb`.
+      Migration `007_sender_company_name.sql`; Claude now generates only the
+      4-6 word blurb, `generate.format_subject()` prefixes it in code; new
+      `sender_company_name` field on campaign settings; warning banner covers
+      both missing fields
 
 ---
 

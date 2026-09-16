@@ -82,9 +82,17 @@
 			</div>
 		</div>
 
-		{#if !campaign.physical_address}
+		{#if !campaign.physical_address || !campaign.sender_company_name}
 			<div class="mb-6 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center justify-between gap-3">
-				<span>No physical address set — required by US law (CAN-SPAM) before sending.</span>
+				<span>
+					{#if !campaign.physical_address && !campaign.sender_company_name}
+						No physical address or company name set — required before sending.
+					{:else if !campaign.physical_address}
+						No physical address set — required by US law (CAN-SPAM) before sending.
+					{:else}
+						No company name set — used in the subject line of every email.
+					{/if}
+				</span>
 				<a href="/campaigns/{id}/settings" class="underline underline-offset-2 whitespace-nowrap">Set it up</a>
 			</div>
 		{/if}

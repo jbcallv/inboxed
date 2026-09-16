@@ -1,5 +1,7 @@
 import json
+
 import anthropic
+
 from ..config import settings
 from .models import Contact, Draft
 
@@ -64,13 +66,20 @@ def _build_user_message(contact: Contact, website_text: str, narrative_bio: str 
     greeting_name = contact.first_name or "there"
     parts.append(
         f'\nReturn JSON only, no markdown. Schema: '
-        f'{{"subject": "under 8 words, specific to this company", '
+        f'{{"subject": "4-6 words, specific to this company. Just the blurb — '
+        f'do not include any company names or a prefix, those are added separately", '
         f'"body": "under 150 words. Start with the greeting \'Hi {greeting_name},\' '
         f'followed by a blank line, then the email. No signature, no sign-off, '
         f'no unsubscribe or footer text after the body."}}'
     )
 
     return "\n".join(parts)
+
+
+def format_subject(sender_company_name: str, their_company_name: str, blurb: str) -> str:
+    sender = sender_company_name.strip() or "Us"
+    theirs = their_company_name.strip() or "You"
+    return f"{sender}/{theirs} - {blurb.strip()}"
 
 
 def _parse_draft(raw: str) -> Draft | None:
