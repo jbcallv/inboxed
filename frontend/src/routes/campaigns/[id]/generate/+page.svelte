@@ -195,7 +195,7 @@
 		<StepNav
 			campaignId={id}
 			prev={{ href: `/campaigns/${id}/verify`, label: '← Verify' }}
-			next={{ href: `/campaigns/\${id}/sample`, label: 'Review sample' }}
+			next={{ href: `/campaigns/${id}/sample`, label: 'Review sample' }}
 		/>
 	</Card>
 </div>
