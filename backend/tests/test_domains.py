@@ -41,7 +41,7 @@ class TestRemainingToday:
     def test_returns_cap_minus_sent(self):
         domain = make_domain(warmup_started_on=date.today())  # cap = 20
         db = mock_db()
-        db.execute.return_value = MagicMock(data=[{"sent_count": 5}])
+        db.execute.return_value = MagicMock(data=5)
 
         with patch("app.core.domains.get_db", return_value=db):
             remaining = remaining_today(domain)
@@ -50,16 +50,25 @@ class TestRemainingToday:
     def test_no_stats_row_means_zero_sent(self):
         domain = make_domain(warmup_started_on=date.today())  # cap = 20
         db = mock_db()
-        db.execute.return_value = MagicMock(data=[])
+        db.execute.return_value = MagicMock(data=0)
 
         with patch("app.core.domains.get_db", return_value=db):
             remaining = remaining_today(domain)
         assert remaining == 20
 
+    def test_counts_sends_across_every_campaign_using_the_domain(self):
+        domain = make_domain(domain="shared.com", warmup_started_on=date.today())
+        db = mock_db()
+        db.execute.return_value = MagicMock(data=0)
+
+        with patch("app.core.domains.get_db", return_value=db):
+            remaining_today(domain)
+        db.rpc.assert_called_once_with("domain_sent_today", {"p_domain": "shared.com"})
+
     def test_cannot_go_below_zero(self):
         domain = make_domain(warmup_started_on=date.today())  # cap = 20
         db = mock_db()
-        db.execute.return_value = MagicMock(data=[{"sent_count": 999}])
+        db.execute.return_value = MagicMock(data=999)
 
         with patch("app.core.domains.get_db", return_value=db):
             remaining = remaining_today(domain)
@@ -122,3 +131,16 @@ class TestAutoAutoPause:
         db.table.side_effect = table_side
         with patch("app.core.domains.get_db", return_value=db):
             check_and_pause_domains()
+
+    def test_pause_applies_to_the_domain_on_every_campaign(self):
+        db = mock_db()
+        db.execute.side_effect = [
+            MagicMock(data=[{"id": "d1", "domain": "shared.com", "status": "active"}]),
+            MagicMock(data=[{"sent_count": 100, "bounce_count": 5, "complaint_count": 0}]),
+            MagicMock(data=[]),
+            MagicMock(data=[]),
+        ]
+        with patch("app.core.domains.get_db", return_value=db):
+            check_and_pause_domains()
+        db.update.assert_called_once_with({"status": "paused"})
+        db.eq.assert_any_call("domain", "shared.com")

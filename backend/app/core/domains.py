@@ -58,7 +58,7 @@ def check_and_pause_domains() -> None:
     for row in domains_result.data:
         if row["status"] == "paused":
             continue
-        _check_domain_rates(db, row["id"])
+        _check_domain_rates(db, row)
 
     # Re-fetch to see updated statuses, then pause campaigns with no active domains
     domains_result = db.table("sending_domains").select("id,status,campaign_id").execute()
@@ -75,10 +75,10 @@ def check_and_pause_domains() -> None:
             ).eq("status", "sending").execute()
 
 
-def _check_domain_rates(db, domain_id: str) -> None:
+def _check_domain_rates(db, domain_row: dict) -> None:
     result = db.table("domain_daily_stats").select(
         "sent_count,bounce_count,complaint_count"
-    ).eq("domain_id", domain_id).order("date", desc=True).limit(3).execute()
+    ).eq("domain_id", domain_row["id"]).order("date", desc=True).limit(3).execute()
 
     rows = result.data
     if not rows:
@@ -92,19 +92,12 @@ def _check_domain_rates(db, domain_id: str) -> None:
     complaint_rate = sum(r["complaint_count"] for r in rows) / total_sent
 
     if bounce_rate > settings.max_bounce_rate or complaint_rate > settings.max_complaint_rate:
-        db.table("sending_domains").update({"status": "paused"}).eq("id", domain_id).execute()
+        # a burned domain is paused on every campaign that shares it
+        db.table("sending_domains").update({"status": "paused"}).eq(
+            "domain", domain_row["domain"]
+        ).execute()
 
 
 def _sent_today(domain: SendingDomain) -> int:
     db = get_db()
-    result = (
-        db.table("domain_daily_stats")
-        .select("sent_count")
-        .eq("domain_id", domain.id)
-        .eq("date", date.today().isoformat())
-        .limit(1)
-        .execute()
-    )
-    if result.data:
-        return result.data[0]["sent_count"]
-    return 0
+    return db.rpc("domain_sent_today", {"p_domain": domain.domain}).execute().data

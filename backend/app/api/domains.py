@@ -1,5 +1,5 @@
 from datetime import date
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from ..db import get_db
 from ..core.suggest_domains import suggest_sending_domains
@@ -52,17 +52,38 @@ def list_domains(campaign_id: str, user: dict = Depends(get_current_user)):
 @router.post("")
 def add_domain(body: DomainCreate, user: dict = Depends(get_current_user)):
     db = get_db()
+    existing_rows = (
+        db.table("sending_domains")
+        .select("campaign_id,status,warmup_started_on,steady_cap_override")
+        .eq("domain", body.domain)
+        .order("created_at", desc=True)
+        .execute()
+        .data
+    )
+    if any(row["campaign_id"] == body.campaign_id for row in existing_rows):
+        raise HTTPException(409, f"{body.domain} is already on this campaign")
     result = db.table("sending_domains").insert(
         {
             "campaign_id": body.campaign_id,
             "domain": body.domain,
             "from_name": body.from_name,
             "from_locals": body.from_locals,
-            "status": "warming",
-            "warmup_started_on": date.today().isoformat(),
+            **_warmup_state(existing_rows),
         }
     ).execute()
     return result.data[0]
+
+
+def _warmup_state(existing_rows: list[dict]) -> dict:
+    """a domain reused from another campaign keeps its warmup progress instead of restarting at day zero"""
+    if not existing_rows:
+        return {"status": "warming", "warmup_started_on": date.today().isoformat()}
+    latest = existing_rows[0]
+    return {
+        "status": latest["status"],
+        "warmup_started_on": latest["warmup_started_on"],
+        "steady_cap_override": latest["steady_cap_override"],
+    }
 
 
 @router.post("/{domain_id}/pause")
